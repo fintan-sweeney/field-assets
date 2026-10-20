@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f3d3e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Field Assets</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <!-- Loading -->
+  <section id="view-loading" class="view center">
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="muted">Loading…</p>
+  </section>
+
+  <!-- Sign in -->
+  <section id="view-login" class="view center" hidden>
+    <div class="card login-card">
+      <img src="icons/icon.svg" alt="" class="login-logo">
+      <h1 class="app-name">Field Assets</h1>
+      <p class="muted">Sign in with the email address you were invited with.</p>
+
+      <form id="form-email" class="stack">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" inputmode="email" required placeholder="you@company.com.au">
+        <button type="submit" class="btn primary">Email me a sign-in code</button>
+      </form>
+
+      <form id="form-code" class="stack" hidden>
+        <p>We sent a code to <strong id="code-email"></strong>. Enter it below.</p>
+        <label for="code">Sign-in code</label>
+        <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required class="code-input">
+        <button type="submit" class="btn primary">Sign in</button>
+        <button type="button" id="btn-code-back" class="btn link">Use a different email</button>
+      </form>
+
+      <p id="login-msg" class="msg" role="status"></p>
+    </div>
+  </section>
+
+  <!-- No access -->
+  <section id="view-denied" class="view center" hidden>
+    <div class="card login-card">
+      <h1>Access not active</h1>
+      <p id="denied-msg" class="muted">Your access to this app is not active. Contact your supervisor if you think this is a mistake.</p>
+      <button id="btn-denied-signout" class="btn">Sign out</button>
+    </div>
+  </section>
+
+  <!-- Main -->
+  <section id="view-main" class="view main" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <img src="icons/icon.svg" alt="" width="28" height="28">
+        <span class="app-name">Field Assets</span>
+      </div>
+      <button id="btn-menu" class="icon-btn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      </button>
+    </header>
+
+    <div class="status-panel">
+      <div class="status-row">
+        <span id="track-pill" class="pill off"><span class="dot"></span><span id="track-pill-text">Tracking off</span></span>
+        <span id="queue-pill" class="pill warn" hidden></span>
+        <span id="offline-pill" class="pill warn" hidden>Offline</span>
+      </div>
+      <div id="position-text" class="position">Waiting for location…</div>
+      <div class="actions">
+        <button id="btn-track" class="btn primary big">Start tracking</button>
+        <button id="btn-refresh" class="btn big" aria-label="Find assets near me">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>
+          Near me
+        </button>
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button id="tab-list" class="tab active" role="tab" aria-selected="true">List</button>
+      <button id="tab-map" class="tab" role="tab" aria-selected="false">Map</button>
+    </nav>
+
+    <div id="panel-list" class="panel">
+      <div id="list-summary" class="list-summary muted"></div>
+      <ul id="asset-list" class="asset-list"></ul>
+    </div>
+    <div id="panel-map" class="panel map-panel" hidden>
+      <div id="map"></div>
+    </div>
+  </section>
+
+  <!-- Settings sheet -->
+  <dialog id="sheet-settings" class="sheet">
+    <form method="dialog" class="stack">
+      <h2>Settings</h2>
+      <div id="user-info" class="muted"></div>
+      <label for="set-radius">Search radius</label>
+      <select id="set-radius">
+        <option value="250">250 m</option>
+        <option value="500">500 m</option>
+        <option value="1000">1 km</option>
+        <option value="2000">2 km</option>
+        <option value="5000">5 km</option>
+        <option value="20000">20 km</option>
+      </select>
+      <label class="check"><input type="checkbox" id="set-wakelock"> Keep screen on while tracking</label>
+      <button value="close" class="btn primary">Done</button>
+      <button type="button" id="btn-signout" class="btn danger">Sign out</button>
+      <p class="tiny muted">Location is only recorded while tracking is on and the app is open.</p>
+    </form>
+  </dialog>
+
+  <!-- First-time tracking notice -->
+  <dialog id="dlg-notice" class="sheet">
+    <form method="dialog" class="stack">
+      <h2>Location tracking</h2>
+      <p id="notice-text"></p>
+      <button value="ok" class="btn primary">I understand, start tracking</button>
+      <button value="cancel" class="btn">Not now</button>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
