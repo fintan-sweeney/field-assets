@@ -423,7 +423,8 @@ function maybeQuery(force = false) {
   if (!f || S.querying) return;
   const q = S.lastQuery;
   const moved = q ? haversine(q.lat, q.lon, f.lat, f.lon) : Infinity;
-  if (force || !q || q.radius !== S.radius || moved >= C.requeryDistanceM) runQuery();
+  // Re-search after moving a set distance (sooner when the radius is small)
+  if (force || !q || q.radius !== S.radius || moved >= Math.min(C.requeryDistanceM, S.radius / 2)) runQuery();
 }
 
 async function runQuery() {
@@ -636,6 +637,13 @@ async function init() {
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW failed', e));
+  }
+
+  // Keep the radius to one of the Settings options (snaps old saved values to the nearest)
+  const radiusOptions = [...$('set-radius').options].map((o) => Number(o.value));
+  if (!radiusOptions.includes(S.radius)) {
+    S.radius = radiusOptions.reduce((a, b) => (Math.abs(b - S.radius) < Math.abs(a - S.radius) ? b : a));
+    store.set('radius', S.radius);
   }
 
   wireLogin();
