@@ -72,17 +72,30 @@ const fmtValue = (v) => {
 async function supabaseBackend() {
   const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
   const sb = createClient(C.supabaseUrl, C.supabaseKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    // detectSessionInUrl: also accept the sign-in LINK from Supabase's default
+    // email (useful for testing). Installed iPhone apps still need the code.
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
   return {
     async getSession() { return (await sb.auth.getSession()).data.session; },
     onSignedOut(cb) { sb.auth.onAuthStateChange((evt) => { if (evt === 'SIGNED_OUT') cb(); }); },
     async sendCode(email) {
-      const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+      const { error } = await sb.auth.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false, emailRedirectTo: location.origin + location.pathname },
+      });
       if (error) throw error;
     },
     async verifyCode(email, token) {
       const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+      if (error) throw error;
+    },
+    async signInPassword(email, password) {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    },
+    async changePassword(password) {
+      const { error } = await sb.auth.updateUser({ password });
       if (error) throw error;
     },
     async signOut() { await sb.auth.signOut(); },
@@ -134,6 +147,12 @@ function demoBackend() {
       if (code !== '123456') throw new Error('Demo mode: the code is 123456');
       signedIn = true; store.set('demo_signed_in', true);
     },
+    async signInPassword(_e, password) {
+      await new Promise((r) => setTimeout(r, 300));
+      if (password !== 'demo1234') throw new Error('Invalid login credentials');
+      signedIn = true; store.set('demo_signed_in', true);
+    },
+    async changePassword() { await new Promise((r) => setTimeout(r, 300)); },
     async signOut() { signedIn = false; store.del('demo_signed_in'); signOutCbs.forEach((f) => f()); },
     async myAccess() { return { email: 'demo@example.com', full_name: 'Demo User', role: 'staff', authorised: true }; },
     async nearest(lat, lon, limit, radius) {
@@ -182,11 +201,18 @@ function show(view) {
   for (const v of ['loading', 'login', 'denied', 'main']) $('view-' + v).hidden = v !== view;
 }
 
+// 'password' (pilot: no emails needed) or 'code' (emailed 6-digit code). Set in config.js.
+const LOGIN_METHOD = C.loginMethod === 'code' ? 'code' : 'password';
+
 function showLogin(message = '', isError = false) {
   stopWatching();
   setTracking(false, { silent: true });
-  $('form-email').hidden = false;
+  $('form-email').hidden = LOGIN_METHOD !== 'code';
+  $('form-password').hidden = LOGIN_METHOD !== 'password';
   $('form-code').hidden = true;
+  $('login-intro').textContent = LOGIN_METHOD === 'password'
+    ? 'Sign in with the email and password you were given.'
+    : 'Sign in with the email address you were invited with.';
   setLoginMsg(message, isError);
   show('login');
 }
@@ -244,7 +270,8 @@ function wireLogin() {
       $('form-code').hidden = false;
       $('code').value = '';
       $('code').focus();
-      setLoginMsg(DEMO ? 'Demo mode: enter 123456' : 'Check your email (and junk folder).');
+      setLoginMsg(DEMO ? 'Demo mode: enter 123456'
+        : 'Check your email (and junk folder). If the email has a link instead of a code, open it on this phone.');
     } catch (err) {
       const msg = /signups? not allowed|not found|otp_disabled|user not found/i.test(err.message || '')
         ? "That email isn't registered for this app. Ask your supervisor to invite you."
@@ -277,7 +304,65 @@ function wireLogin() {
     setLoginMsg('');
   });
 
+  // Email + password sign-in
+  $('form-password').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('pw-email').value.trim().toLowerCase();
+    const btn = e.submitter || $('form-password').querySelector('button[type=submit]');
+    btn.disabled = true;
+    setLoginMsg('Signing in…');
+    try {
+      await S.api.signInPassword(email, $('pw-password').value);
+      store.set('email', email);
+      $('pw-password').value = '';
+      setLoginMsg('');
+      await enterApp();
+    } catch (err) {
+      const m = err.message || String(err);
+      setLoginMsg(/invalid login|invalid credentials|invalid_grant/i.test(m)
+        ? 'Email or password is incorrect. Check them and try again, or ask your supervisor to reset your password.'
+        : /rate|too many/i.test(m) ? 'Too many attempts. Wait a few minutes and try again.'
+        : /fetch|network/i.test(m) ? 'Could not reach the server. Check your connection and try again.'
+        : `Couldn't sign in: ${m}`, true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('pw-show').addEventListener('change', (e) => {
+    $('pw-password').type = e.target.checked ? 'text' : 'password';
+  });
+
   $('email').value = store.get('email', '');
+  $('pw-email').value = store.get('email', '');
+}
+
+// Change password (password sign-in only)
+function wireChangePassword() {
+  $('pw-change-section').hidden = LOGIN_METHOD !== 'password';
+  $('btn-change-pw').addEventListener('click', async () => {
+    const msg = $('pw-change-msg');
+    const p1 = $('pw-new').value, p2 = $('pw-new2').value;
+    msg.classList.add('error');
+    if (p1.length < 8) { msg.textContent = 'Use at least 8 characters.'; return; }
+    if (p1 !== p2) { msg.textContent = "The two passwords don't match."; return; }
+    $('btn-change-pw').disabled = true;
+    msg.classList.remove('error');
+    msg.textContent = 'Saving…';
+    try {
+      await S.api.changePassword(p1);
+      $('pw-new').value = ''; $('pw-new2').value = '';
+      msg.textContent = 'Password changed.';
+    } catch (err) {
+      msg.classList.add('error');
+      const m = err.message || String(err);
+      msg.textContent = /same|different/i.test(m) ? 'Choose a password different from your current one.'
+        : /weak|short|characters/i.test(m) ? `That password isn't strong enough: ${m}`
+        : `Couldn't change password: ${m}`;
+    } finally {
+      $('btn-change-pw').disabled = false;
+    }
+  });
 }
 
 async function signOut() {
@@ -656,6 +741,10 @@ function updateStatus() {
 // ---------------------------------------------------------------------------
 
 async function init() {
+  // If the user arrived from an email link that failed, Supabase puts the reason in the URL
+  const hashParams = new URLSearchParams(location.hash.slice(1));
+  const linkError = hashParams.get('error_description') || hashParams.get('error') || '';
+
   document.title = C.appName;
   document.querySelectorAll('.app-name').forEach((n) => { n.textContent = C.appName; });
 
@@ -664,6 +753,7 @@ async function init() {
   }
 
   wireLogin();
+  wireChangePassword();
   $('btn-track').addEventListener('click', onTrackButton);
   $('btn-refresh').addEventListener('click', () => (S.fix ? runQuery() : toast('Waiting for your location…')));
   $('tab-list').addEventListener('click', () => selectTab('list'));
@@ -700,6 +790,7 @@ async function init() {
   if (unconfigured) {
     showLogin('This app has not been set up yet: add your Supabase details to config.js. To try it now, add ?demo to the address.', true);
     $('form-email').hidden = true;
+    $('form-password').hidden = true;
     return;
   }
 
@@ -716,8 +807,17 @@ async function init() {
   S.api.onSignedOut(() => showLogin('You have been signed out.'));
 
   const session = await S.api.getSession().catch(() => null);
-  if (session) await enterApp();
-  else showLogin(DEMO ? 'Demo mode: use any email, then code 123456.' : '');
+  if (session) {
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    await enterApp();
+  } else if (linkError) {
+    history.replaceState(null, '', location.pathname + location.search);
+    showLogin(/expired/i.test(linkError)
+      ? 'That sign-in link has expired or was already used. Request a new one.'
+      : `Sign-in link didn't work: ${linkError}`, true);
+  } else {
+    showLogin(DEMO ? (LOGIN_METHOD === 'password' ? 'Demo mode: use any email and the password demo1234.' : 'Demo mode: use any email, then code 123456.') : '');
+  }
 }
 
 init();

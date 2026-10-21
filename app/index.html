@@ -13,6 +13,15 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Password boxes match the other inputs (kept here so styles.css is unchanged) */
+    input[type=password] {
+      width: 100%; min-height: var(--tap, 52px); padding: 0 14px; font: inherit;
+      color: var(--text); background: var(--surface);
+      border: 2px solid var(--border); border-radius: 10px;
+    }
+    input[type=password]:focus { outline: none; border-color: var(--brand); }
+  </style>
   <script src="config.js"></script>
 </head>
 <body>
@@ -28,16 +37,25 @@
     <div class="card login-card">
       <img src="icons/icon.svg" alt="" class="login-logo">
       <h1 class="app-name">Field Assets</h1>
-      <p class="muted">Sign in with the email address you were invited with.</p>
+      <p id="login-intro" class="muted">Sign in with the email address you were invited with.</p>
 
-      <form id="form-email" class="stack">
+      <form id="form-password" class="stack" hidden>
+        <label for="pw-email">Email</label>
+        <input id="pw-email" type="email" autocomplete="username" inputmode="email" required placeholder="you@company.com.au">
+        <label for="pw-password">Password</label>
+        <input id="pw-password" type="password" autocomplete="current-password" required>
+        <label class="check"><input type="checkbox" id="pw-show"> Show password</label>
+        <button type="submit" class="btn primary">Sign in</button>
+      </form>
+
+      <form id="form-email" class="stack" hidden>
         <label for="email">Email</label>
         <input id="email" type="email" autocomplete="email" inputmode="email" required placeholder="you@company.com.au">
         <button type="submit" class="btn primary">Email me a sign-in code</button>
       </form>
 
       <form id="form-code" class="stack" hidden>
-        <p>We sent a code to <strong id="code-email"></strong>. Enter it below.</p>
+        <p>We emailed <strong id="code-email"></strong>. Enter the code below, or open the sign-in link in the email on this device.</p>
         <label for="code">Sign-in code</label>
         <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required class="code-input">
         <button type="submit" class="btn primary">Sign in</button>
@@ -114,6 +132,13 @@
         <option value="20000">20 km</option>
       </select>
       <label class="check"><input type="checkbox" id="set-wakelock"> Keep screen on while tracking</label>
+      <div id="pw-change-section" class="stack" hidden>
+        <label for="pw-new">Change password</label>
+        <input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">
+        <input id="pw-new2" type="password" autocomplete="new-password" placeholder="Type it again">
+        <button type="button" id="btn-change-pw" class="btn">Save new password</button>
+        <p id="pw-change-msg" class="msg" role="status"></p>
+      </div>
       <button value="close" class="btn primary">Done</button>
       <button type="button" id="btn-signout" class="btn danger">Sign out</button>
       <p class="tiny muted">Location is only recorded while tracking is on and the app is open.</p>
