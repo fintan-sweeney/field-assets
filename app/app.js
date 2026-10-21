@@ -111,10 +111,6 @@ async function supabaseBackend() {
       if (error) throw error;
       return data || [];
     },
-    async logLocations(points) {
-      const { error } = await sb.rpc('log_locations', { p_points: points });
-      if (error) throw error;
-    },
   };
 }
 
@@ -163,7 +159,6 @@ function demoBackend() {
         .sort((a, b) => a.distance_m - b.distance_m)
         .slice(0, limit);
     },
-    async logLocations(points) { console.info('[demo] logged', points); },
   };
 }
 
@@ -176,17 +171,11 @@ const S = {
   access: null,
   fix: null,             // latest GPS fix {lat, lon, accuracy, speed, heading, time}
   watchId: null,
-  tracking: false,
-  lastLog: store.get('last_log'),
   lastQuery: null,       // {lat, lon, radius}
   querying: false,
   assets: store.get('assets_cache', []),
   assetsAt: store.get('assets_cache_at'),
-  queue: store.get('queue', []),
   radius: store.get('radius', C.defaultRadiusM),
-  wakePref: store.get('wake_pref', true),
-  wakeLock: null,
-  heartbeat: null,
   openAsset: null,
   map: null,
   mapLayers: null,
@@ -206,7 +195,6 @@ const LOGIN_METHOD = C.loginMethod === 'code' ? 'code' : 'password';
 
 function showLogin(message = '', isError = false) {
   stopWatching();
-  setTracking(false, { silent: true });
   $('form-email').hidden = LOGIN_METHOD !== 'code';
   $('form-password').hidden = LOGIN_METHOD !== 'password';
   $('form-code').hidden = true;
@@ -247,8 +235,6 @@ async function enterApp() {
   renderList();
   updateStatus();
   startWatching();
-  if (store.get('tracking', false)) setTracking(true, { silent: true });
-  flushQueue();
 }
 
 // ---------------------------------------------------------------------------
@@ -366,11 +352,8 @@ function wireChangePassword() {
 }
 
 async function signOut() {
-  if (S.queue.length && !confirm(`${S.queue.length} location point(s) haven't uploaded yet and will be lost. Sign out anyway?`)) return;
   $('sheet-settings').close();
-  setTracking(false, { silent: true });
-  store.del('queue'); S.queue = [];
-  store.del('assets_cache'); store.del('access'); store.del('tracking');
+  store.del('assets_cache'); store.del('access');
   S.assets = [];
   await S.api.signOut();
   showLogin('You have signed out.');
@@ -414,106 +397,21 @@ function onFix(pos) {
     speed: c.speed, heading: c.heading, time: new Date(pos.timestamp || Date.now()),
   };
   updateStatus();
-  maybeLog();
   maybeQuery();
   updateDistances();
   updateMapUser();
 }
 
-// Log a point if tracking is on and enough time has passed or we've moved
-function maybeLog(force = false) {
-  const f = S.fix;
-  if (!S.tracking || !f) return;
-  if (f.accuracy > C.maxAccuracyM) return;
-  const last = S.lastLog;
-  const now = Date.now();
-  const elapsed = last ? (now - last.t) / 1000 : Infinity;
-  const moved = last ? haversine(last.lat, last.lon, f.lat, f.lon) : Infinity;
-  const due = force || elapsed >= C.logMinIntervalSec || (moved >= C.logMinDistanceM && elapsed >= 10);
-  if (!due) return;
-
-  S.queue.push({
-    lat: +f.lat.toFixed(7), lon: +f.lon.toFixed(7),
-    accuracy: Math.round(f.accuracy * 10) / 10,
-    speed: f.speed ?? null, heading: f.heading ?? null,
-    recorded_at: new Date().toISOString(), source: 'track',
-  });
-  if (S.queue.length > 5000) S.queue.splice(0, S.queue.length - 5000);   // cap offline storage
-  store.set('queue', S.queue);
-  S.lastLog = { lat: f.lat, lon: f.lon, t: now };
-  store.set('last_log', S.lastLog);
-  updateStatus();
-  flushQueue();
-}
-
-let flushing = false;
-async function flushQueue() {
-  if (flushing || !S.queue.length || !navigator.onLine || !S.access) return;
-  flushing = true;
-  try {
-    while (S.queue.length) {
-      const batch = S.queue.slice(0, 200);
-      await S.api.logLocations(batch);
-      S.queue.splice(0, batch.length);
-      store.set('queue', S.queue);
-    }
-  } catch (e) {
-    console.warn('Upload failed, will retry', e);
-    if (/JWT|auth|401|403/i.test(e.message || '')) checkStillAuthorised();
-  } finally {
-    flushing = false;
-    updateStatus();
-  }
-}
-
-async function checkStillAuthorised() {
-  if (!(await S.api.getSession())) showLogin('Your session ended. Please sign in again.');
-}
-
-function setTracking(on, { silent = false } = {}) {
-  S.tracking = on;
-  store.set('tracking', on);
-  clearInterval(S.heartbeat);
-  if (on) {
-    startWatching();
-    // watchPosition may go quiet when standing still, so poll as well
-    S.heartbeat = setInterval(() => {
-      navigator.geolocation.getCurrentPosition(onFix, () => {}, { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
-      flushQueue();
-    }, Math.max(15, C.logMinIntervalSec) * 1000);
-    maybeLog(true);
-    requestWakeLock();
-    if (!silent) toast('Tracking on');
-  } else {
-    releaseWakeLock();
-    if (!silent) toast('Tracking off');
-  }
-  updateStatus();
-}
-
-function onTrackButton() {
-  if (S.tracking) { setTracking(false); return; }
-  if (store.get('notice_ack', false)) { setTracking(true); return; }
-  const dlg = $('dlg-notice');
-  $('notice-text').textContent = C.trackingNotice;
-  dlg.returnValue = '';
-  dlg.showModal();
-  dlg.addEventListener('close', () => {
-    if (dlg.returnValue === 'ok') { store.set('notice_ack', true); setTracking(true); }
-  }, { once: true });
-}
-
-async function requestWakeLock() {
-  if (!S.tracking || !S.wakePref || !('wakeLock' in navigator) || S.wakeLock) return;
-  try {
-    S.wakeLock = await navigator.wakeLock.request('screen');
-    S.wakeLock.addEventListener('release', () => { S.wakeLock = null; });
-  } catch { /* not allowed right now (e.g. low battery) */ }
-}
-
-function releaseWakeLock() {
-  S.wakeLock?.release().catch(() => {});
-  S.wakeLock = null;
+// "Find Assets Near Me": get a fresh GPS fix, then search
+function findNearMe() {
+  if (!('geolocation' in navigator)) { toast('This device cannot provide location.'); return; }
+  const btn = $('btn-refresh');
+  btn.disabled = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { btn.disabled = false; onFix(pos); if (!S.querying) runQuery(); },
+    () => { btn.disabled = false; if (S.fix) runQuery(); else toast('Waiting for your location…'); },
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -572,7 +470,7 @@ function renderList() {
     summary.textContent = '';
     list.append(el('li', { class: 'empty' },
       S.lastQuery ? `No assets within ${fmtDist(S.radius)}. Try a larger radius in Settings.`
-                  : S.fix ? 'Tap "Near me" to find assets.' : 'Waiting for your location…'));
+                  : S.fix ? 'Tap "Find Assets Near Me" to see what\'s around you.' : 'Waiting for your location…'));
     return;
   }
 
@@ -602,8 +500,8 @@ function renderList() {
       const dest = `${a.lat},${a.lon}`;
       li.append(el('div', { class: 'asset-body' }, dl,
         el('div', { class: 'asset-actions' },
-          el('a', { class: 'btn primary', href: `https://www.google.com/maps/dir/?api=1&destination=${dest}`, target: '_blank', rel: 'noopener' }, 'Directions'),
-          el('button', { class: 'btn', onclick: () => showOnMap(a) }, 'Show on map'),
+          el('button', { class: 'btn primary', onclick: () => showOnMap(a) }, 'Show on map'),
+          el('a', { class: 'btn', href: `https://www.google.com/maps/dir/?api=1&destination=${dest}`, target: '_blank', rel: 'noopener' }, 'Directions'),
           el('button', { class: 'btn', onclick: () => copy(a.asset_id) }, 'Copy ID'))));
     }
     list.append(li);
@@ -707,21 +605,6 @@ function selectTab(which) {
 // ---------------------------------------------------------------------------
 
 function updateStatus() {
-  const pill = $('track-pill');
-  pill.classList.toggle('on', S.tracking);
-  pill.classList.toggle('off', !S.tracking);
-  $('track-pill-text').textContent = S.tracking
-    ? (S.lastLog ? `Tracking · logged ${fmtTime(new Date(S.lastLog.t))}` : 'Tracking')
-    : 'Tracking off';
-
-  const btn = $('btn-track');
-  btn.textContent = S.tracking ? 'Stop tracking' : 'Start tracking';
-  btn.classList.toggle('tracking', S.tracking);
-  btn.classList.toggle('primary', !S.tracking);
-
-  const qp = $('queue-pill');
-  qp.hidden = !S.queue.length;
-  qp.textContent = `${S.queue.length} waiting to upload`;
   $('offline-pill').hidden = navigator.onLine;
 
   const t = $('position-text');
@@ -741,6 +624,9 @@ function updateStatus() {
 // ---------------------------------------------------------------------------
 
 async function init() {
+  // Earlier versions could record location; clear anything they left on the phone
+  ['queue', 'tracking', 'last_log', 'notice_ack', 'wake_pref'].forEach((k) => store.del(k));
+
   // If the user arrived from an email link that failed, Supabase puts the reason in the URL
   const hashParams = new URLSearchParams(location.hash.slice(1));
   const linkError = hashParams.get('error_description') || hashParams.get('error') || '';
@@ -754,13 +640,11 @@ async function init() {
 
   wireLogin();
   wireChangePassword();
-  $('btn-track').addEventListener('click', onTrackButton);
-  $('btn-refresh').addEventListener('click', () => (S.fix ? runQuery() : toast('Waiting for your location…')));
+  $('btn-refresh').addEventListener('click', findNearMe);
   $('tab-list').addEventListener('click', () => selectTab('list'));
   $('tab-map').addEventListener('click', () => selectTab('map'));
   $('btn-menu').addEventListener('click', () => {
     $('set-radius').value = String(S.radius);
-    $('set-wakelock').checked = S.wakePref;
     $('sheet-settings').showModal();
   });
   $('set-radius').addEventListener('change', (e) => {
@@ -768,21 +652,15 @@ async function init() {
     store.set('radius', S.radius);
     maybeQuery(true);
   });
-  $('set-wakelock').addEventListener('change', (e) => {
-    S.wakePref = e.target.checked;
-    store.set('wake_pref', S.wakePref);
-    S.wakePref ? requestWakeLock() : releaseWakeLock();
-  });
   $('btn-signout').addEventListener('click', signOut);
   $('btn-denied-signout').addEventListener('click', signOut);
 
-  addEventListener('online', () => { updateStatus(); flushQueue(); maybeQuery(); });
+  addEventListener('online', () => { updateStatus(); maybeQuery(); });
   addEventListener('offline', updateStatus);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      requestWakeLock();
-      flushQueue();
-      if (S.tracking) navigator.geolocation.getCurrentPosition(onFix, () => {}, { enableHighAccuracy: true, maximumAge: 10000 });
+      // Coming back to the app: refresh the position so distances are current
+      if (S.access) navigator.geolocation.getCurrentPosition(onFix, () => {}, { enableHighAccuracy: true, maximumAge: 10000 });
     }
   });
 

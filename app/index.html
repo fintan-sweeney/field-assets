@@ -21,6 +21,9 @@
       border: 2px solid var(--border); border-radius: 10px;
     }
     input[type=password]:focus { outline: none; border-color: var(--brand); }
+    /* One main button across the full width; hide the status row when it's empty */
+    .actions { grid-template-columns: 1fr; }
+    .status-row:not(:has(.pill:not([hidden]))) { display: none; }
   </style>
   <script src="config.js"></script>
 </head>
@@ -89,16 +92,13 @@
 
     <div class="status-panel">
       <div class="status-row">
-        <span id="track-pill" class="pill off"><span class="dot"></span><span id="track-pill-text">Tracking off</span></span>
-        <span id="queue-pill" class="pill warn" hidden></span>
         <span id="offline-pill" class="pill warn" hidden>Offline</span>
       </div>
       <div id="position-text" class="position">Waiting for location…</div>
       <div class="actions">
-        <button id="btn-track" class="btn primary big">Start tracking</button>
-        <button id="btn-refresh" class="btn big" aria-label="Find assets near me">
+        <button id="btn-refresh" class="btn primary big">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>
-          Near me
+          Find Assets Near Me
         </button>
       </div>
     </div>
@@ -131,7 +131,6 @@
         <option value="5000">5 km</option>
         <option value="20000">20 km</option>
       </select>
-      <label class="check"><input type="checkbox" id="set-wakelock"> Keep screen on while tracking</label>
       <div id="pw-change-section" class="stack" hidden>
         <label for="pw-new">Change password</label>
         <input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">
@@ -141,19 +140,10 @@
       </div>
       <button value="close" class="btn primary">Done</button>
       <button type="button" id="btn-signout" class="btn danger">Sign out</button>
-      <p class="tiny muted">Location is only recorded while tracking is on and the app is open.</p>
+      <p class="tiny muted">Your location is used only to find nearby assets. It isn't recorded or stored.</p>
     </form>
   </dialog>
 
-  <!-- First-time tracking notice -->
-  <dialog id="dlg-notice" class="sheet">
-    <form method="dialog" class="stack">
-      <h2>Location tracking</h2>
-      <p id="notice-text"></p>
-      <button value="ok" class="btn primary">I understand, start tracking</button>
-      <button value="cancel" class="btn">Not now</button>
-    </form>
-  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
