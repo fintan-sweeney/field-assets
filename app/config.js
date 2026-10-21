@@ -10,7 +10,7 @@ window.APP_CONFIG = {
   supabaseKey: 'sb_publishable_pbBN0iVn6dV-jRoR5RRsbg_wgkrWMjG',
 
   // Nearby asset search
-  defaultRadiusM: 1000,        // search radius in metres (user can change)
+  defaultRadiusM: 250,        // search radius in metres (user can change)
   maxResults: 30,              // assets shown in the list
   requeryDistanceM: 40,        // re-run the search after moving this far
 
