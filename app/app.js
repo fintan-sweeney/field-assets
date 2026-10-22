@@ -214,9 +214,9 @@ function demoBackend() {
       if (!job || job.status !== 'Open') throw new Error('Job not found or already closed');
       const done = new Date();
       job.status = 'Closed'; job.work_completed_at = done.toISOString();
-      job.duration_of_work = Math.round((done - new Date(job.work_started_at)) / 600) / 100;
+      job.duration_mins = Math.round((done - new Date(job.work_started_at)) / 600) / 100;
       store.set('demo_jobs', jobs);
-      return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_of_work: job.duration_of_work };
+      return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_mins: job.duration_mins };
     },
     async workStatus(keys) {
       const jobs = store.get('demo_jobs', {});
@@ -253,6 +253,8 @@ const S = {
   popup: null,           // {a, m, ok} for the open map popup
 };
 
+// App name in the banner (older config.js files still say 'Field Assets')
+const APP_NAME = (!C.appName || C.appName === 'Field Assets') ? 'FibreconX Field App' : C.appName;
 const CLOSED_DAYS = Number.isFinite(C.showClosedForDays) ? C.showClosedForDays : 7;
 // Must match v_max_distance_m in the database log_on function (06_work_logs.sql)
 const LOGON_MAX_M = Number.isFinite(C.logOnMaxDistanceM) ? C.logOnMaxDistanceM : 500;
@@ -967,7 +969,7 @@ async function submitLogOff(e) {
     $('dlg-logoff').close();
     renderActiveJobs();
     refreshAssetOnMap(a);
-    const mins = res?.duration_of_work;
+    const mins = res?.duration_mins;
     toast(`Logged off · status CLOSED${mins != null ? ` · ${Number(mins).toFixed(2)} min` : ''}`, 4000);
   } catch (err) {
     console.error(err);
@@ -1021,8 +1023,8 @@ async function init() {
   const hashParams = new URLSearchParams(location.hash.slice(1));
   const linkError = hashParams.get('error_description') || hashParams.get('error') || '';
 
-  document.title = C.appName;
-  document.querySelectorAll('.app-name').forEach((n) => { n.textContent = C.appName; });
+  document.title = APP_NAME;
+  document.querySelectorAll('.app-name').forEach((n) => { n.textContent = APP_NAME; });
 
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW failed', e));
