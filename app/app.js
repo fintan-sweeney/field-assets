@@ -111,6 +111,37 @@ async function supabaseBackend() {
       if (error) throw error;
       return data || [];
     },
+    // ---- work logs (Log On / Log Off)
+    async userId() { return (await sb.auth.getSession()).data.session?.user?.id; },
+    async uploadPhoto(path, blob) {
+      const { error } = await sb.storage.from('work-photos')
+        .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+      if (error) throw error;
+    },
+    async logOn(p) {
+      const { data, error } = await sb.rpc('log_on', {
+        p_work_id: p.workId, p_layer: p.layer, p_asset_id: p.assetId, p_lat: p.lat, p_lon: p.lon,
+        p_issue: p.issue, p_issue_comments: p.issueComments, p_photos: p.photos,
+        p_user_lat: p.userLat, p_user_lon: p.userLon, p_user_accuracy: p.userAccuracy,
+      });
+      if (error) throw error;
+      return data;
+    },
+    async logOff(p) {
+      const { data, error } = await sb.rpc('log_off', { p_work_id: p.workId, p_comments: p.comments, p_photos: p.photos });
+      if (error) throw error;
+      return data;
+    },
+    async workStatus(keys) {
+      const { data, error } = await sb.rpc('asset_work_status', { p_assets: keys, p_closed_days: CLOSED_DAYS });
+      if (error) throw error;
+      return data || [];
+    },
+    async myOpenWork() {
+      const { data, error } = await sb.rpc('my_open_work');
+      if (error) throw error;
+      return data || [];
+    },
   };
 }
 
@@ -159,6 +190,42 @@ function demoBackend() {
         .sort((a, b) => a.distance_m - b.distance_m)
         .slice(0, limit);
     },
+    // ---- work logs, kept in memory (and localStorage) for the demo
+    async userId() { return 'demo-user'; },
+    async uploadPhoto(path, blob) { console.info('[demo] upload', path, blob.size, blob.type); await new Promise((r) => setTimeout(r, 150)); },
+    async logOn(p) {
+      await new Promise((r) => setTimeout(r, 200));
+      const jobs = store.get('demo_jobs', {});
+      const key = `${p.layer}|${p.assetId}`;
+      if (jobs[key]?.status === 'Open') throw new Error('This asset is already open');
+      if (p.issue === 'Yes' && (!p.issueComments || !p.photos.length)) throw new Error('A comment and photo are required');
+      const dist = haversine(p.userLat, p.userLon, p.lat, p.lon);
+      if (dist > LOGON_MAX_M) throw new Error(`You are ${Math.round(dist)} m from this asset. You must be within ${LOGON_MAX_M} m to log on.`);
+      const job = { asset_layer: p.layer, asset_id: p.assetId, work_id: p.workId, status: 'Open', is_mine: true,
+        field_worker_name: 'Demo User', work_started_at: new Date().toISOString(), work_completed_at: null,
+        asset_name: p.assetName, asset_lat: p.lat, asset_lon: p.lon };
+      jobs[key] = job; store.set('demo_jobs', jobs);
+      return { work_id: p.workId, status: 'Open', work_started_at: job.work_started_at, field_worker_name: 'Demo User' };
+    },
+    async logOff(p) {
+      await new Promise((r) => setTimeout(r, 200));
+      const jobs = store.get('demo_jobs', {});
+      const job = Object.values(jobs).find((j) => j.work_id === p.workId);
+      if (!job || job.status !== 'Open') throw new Error('Job not found or already closed');
+      const done = new Date();
+      job.status = 'Closed'; job.work_completed_at = done.toISOString();
+      job.duration_of_work = Math.round((done - new Date(job.work_started_at)) / 600) / 100;
+      store.set('demo_jobs', jobs);
+      return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_of_work: job.duration_of_work };
+    },
+    async workStatus(keys) {
+      const jobs = store.get('demo_jobs', {});
+      return keys.map((k) => jobs[`${k.layer}|${k.asset_id}`]).filter(Boolean);
+    },
+    async myOpenWork() {
+      return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open')
+        .map((j) => ({ ...j, work_id: j.work_id }));
+    },
   };
 }
 
@@ -180,7 +247,16 @@ const S = {
   map: null,
   mapLayers: null,
   mapFitted: false,
+  markers: {},           // asset key -> map marker
+  work: {},              // asset key -> latest job {status, work_id, is_mine, ...}
+  myOpen: [],            // my open jobs (for the "logged on" banner)
+  popup: null,           // {a, m, ok} for the open map popup
 };
+
+const CLOSED_DAYS = Number.isFinite(C.showClosedForDays) ? C.showClosedForDays : 7;
+// Must match v_max_distance_m in the database log_on function (06_work_logs.sql)
+const LOGON_MAX_M = Number.isFinite(C.logOnMaxDistanceM) ? C.logOnMaxDistanceM : 500;
+const assetKey = (a) => `${a.layer}|${a.asset_id}`;
 
 // ---------------------------------------------------------------------------
 // Views
@@ -235,6 +311,7 @@ async function enterApp() {
   renderList();
   updateStatus();
   startWatching();
+  loadMyOpenWork();
 }
 
 // ---------------------------------------------------------------------------
@@ -400,6 +477,11 @@ function onFix(pos) {
   maybeQuery();
   updateDistances();
   updateMapUser();
+  // If a popup is open and the person has moved into (or out of) Log On range, refresh it
+  if (S.popup) {
+    const why = logOnCheck(S.popup.a).why || '';
+    if (why !== S.popup.why) { S.popup.why = why; S.popup.m.setPopupContent(buildPopup(S.popup.a)); }
+  }
 }
 
 // "Find Assets Near Me": get a fresh GPS fix, then search
@@ -441,6 +523,7 @@ async function runQuery() {
     S.lastQuery = { lat: f.lat, lon: f.lon, radius: S.radius };
     store.set('assets_cache', rows);
     store.set('assets_cache_at', S.assetsAt);
+    await refreshWorkStatus();
     renderList();
     renderMapAssets();
   } catch (e) {
@@ -485,7 +568,7 @@ function renderList() {
     const head = el('button', { class: 'asset-head', 'aria-expanded': String(open), onclick: () => {
       S.openAsset = open ? null : key; renderList();
     } },
-      el('span', { class: 'asset-name' }, a.name || a.asset_id),
+      el('span', { class: 'asset-name' }, a.name || a.asset_id, workTag(S.work[key])),
       el('span', { class: 'asset-dist', 'data-key': key }, fmtDist(d), el('small', {}, dir || '')),
       el('span', { class: 'asset-meta' },
         el('span', {}, a.asset_type || a.layer),
@@ -557,15 +640,23 @@ function updateMapUser() {
 function renderMapAssets() {
   if (!S.map) return;
   const g = S.mapLayers.assets;
+  const reopenKey = S.popup ? assetKey(S.popup.a) : null;   // keep an open popup open across refreshes
   g.clearLayers();
+  S.markers = {};
   const pts = [];
   for (const a of S.assets) {
     if (a.lat == null) continue;
-    const { d } = liveDistance(a);
-    const pop = el('div', {}, el('strong', {}, a.name || a.asset_id), el('br'),
-      `${a.asset_type || a.layer}${a.status ? ' · ' + a.status : ''}`, el('br'), fmtDist(d));
-    L.marker([a.lat, a.lon], { icon: L.divIcon({ className: '', html: '<div class="asset-marker"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }) })
-      .bindPopup(pop).addTo(g);
+    const key = assetKey(a);
+    const st = (S.work[key]?.status || '').toLowerCase();
+    const html = st === 'open' ? '<div class="asset-marker open"><span>OPEN</span></div>'
+      : st === 'closed' ? '<div class="asset-marker closed"></div>' : '<div class="asset-marker"></div>';
+    const m = L.marker([a.lat, a.lon], {
+      icon: L.divIcon({ className: '', html, iconSize: [18, 18], iconAnchor: [9, 9] }),
+      zIndexOffset: st === 'open' ? 1000 : 0,
+    }).bindPopup(() => buildPopup(a), { minWidth: 220 }).addTo(g);
+    m.on('popupopen', () => { S.popup = { a, m, why: logOnCheck(a).why || '' }; });
+    m.on('popupclose', () => { if (S.popup?.m === m) S.popup = null; });
+    S.markers[key] = m;
     pts.push([a.lat, a.lon]);
   }
   if (!S.mapFitted && pts.length) {
@@ -573,16 +664,25 @@ function renderMapAssets() {
     S.map.fitBounds(pts, { padding: [30, 30], maxZoom: 18 });
     S.mapFitted = true;
   }
+  if (reopenKey && S.markers[reopenKey] && !$('panel-map').hidden) S.markers[reopenKey].openPopup();
 }
 
 function showOnMap(a) {
+  if (!S.assets.some((x) => assetKey(x) === assetKey(a))) {   // e.g. an open job far from here
+    S.assets.push(a);
+    renderMapAssets();
+  }
   selectTab('map');
   if (!S.map) return;
   S.map.setView([a.lat, a.lon], 18);
-  S.mapLayers.assets.eachLayer((m) => {
-    const ll = m.getLatLng();
-    if (Math.abs(ll.lat - a.lat) < 1e-9 && Math.abs(ll.lng - a.lon) < 1e-9) m.openPopup();
-  });
+  S.markers[assetKey(a)]?.openPopup();
+}
+
+// Re-draw markers and re-open the popup for one asset (after its status changes)
+function refreshAssetOnMap(a) {
+  renderList();
+  renderMapAssets();
+  if (S.map && !$('panel-map').hidden) S.markers[assetKey(a)]?.openPopup();
 }
 
 function selectTab(which) {
@@ -599,6 +699,295 @@ function selectTab(which) {
   } else {
     renderList();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Work logs: Log On (integrity report) and Log Off (close-out)
+// ---------------------------------------------------------------------------
+
+function workTag(w) {
+  if (!w) return null;
+  return el('span', { class: `work-tag ${w.status === 'Open' ? 'open' : 'closed'}` }, w.status.toUpperCase());
+}
+
+async function refreshWorkStatus() {
+  if (!S.assets.length) return;
+  try {
+    const rows = await S.api.workStatus(S.assets.map((a) => ({ layer: a.layer, asset_id: a.asset_id })));
+    S.work = {};
+    for (const r of rows) S.work[`${r.asset_layer}|${r.asset_id}`] = r;
+  } catch (e) {
+    console.warn('Could not load work status', e);
+  }
+}
+
+async function loadMyOpenWork() {
+  try { S.myOpen = await S.api.myOpenWork(); } catch (e) { console.warn(e); }
+  renderActiveJobs();
+}
+
+// Banner under the main button: "You're logged on to Joint 0001 since 9:14"
+function renderActiveJobs() {
+  const box = $('active-jobs');
+  box.innerHTML = '';
+  box.hidden = !S.myOpen.length;
+  for (const j of S.myOpen) {
+    const a = S.assets.find((x) => x.layer === j.asset_layer && x.asset_id === j.asset_id)
+      || { layer: j.asset_layer, asset_id: j.asset_id, name: j.asset_name, lat: j.asset_lat, lon: j.asset_lon, asset_type: j.asset_layer };
+    box.append(el('div', { class: 'active-job' },
+      el('span', { class: 'work-tag open' }, 'OPEN'),
+      el('span', { class: 'active-job-text' }, `You're logged on to `, el('strong', {}, j.asset_name || j.asset_id),
+        ` since ${fmtTime(new Date(j.work_started_at))}`),
+      a.lat != null ? el('button', { class: 'btn small', onclick: () => {
+        S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
+        showOnMap(a);
+      } }, 'Show') : null));
+  }
+}
+
+// Can the person log on to this asset from where they are now?
+function logOnCheck(a) {
+  if (!S.fix) return { ok: false, why: 'Waiting for your location…' };
+  if (S.fix.accuracy > LOGON_MAX_M) {
+    return { ok: false, why: `GPS signal too weak (±${Math.round(S.fix.accuracy)} m). Move outside or wait for a better signal.` };
+  }
+  const d = haversine(S.fix.lat, S.fix.lon, a.lat, a.lon);
+  if (d > LOGON_MAX_M) return { ok: false, why: `You're ${fmtDist(d)} away. Move within ${fmtDist(LOGON_MAX_M)} to log on.` };
+  return { ok: true, d };
+}
+
+const getFreshFix = () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(
+  resolve, reject, { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }));
+
+function buildPopup(a) {
+  const key = assetKey(a);
+  const w = S.work[key];
+  const { d } = liveDistance(a);
+  const box = el('div', { class: 'popup' },
+    el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id), workTag(w)),
+    el('div', { class: 'muted' }, `${a.asset_type || a.layer}${a.status ? ' · ' + a.status : ''}`),
+    d != null ? el('div', { class: 'muted' }, fmtDist(d)) : null);
+
+  if (w?.status === 'Open') {
+    const who = w.is_mine ? 'You' : (w.field_worker_name || 'Another user');
+    box.append(el('div', { class: 'popup-status open' },
+      `Status: OPEN · ${who} logged on at ${fmtTime(new Date(w.work_started_at))}`));
+    if (w.is_mine) box.append(el('button', { class: 'btn danger-fill', onclick: () => openLogOff(a) }, 'Log Off'));
+  } else {
+    if (w?.status === 'Closed') {
+      box.append(el('div', { class: 'popup-status closed' },
+        `Status: CLOSED${w.work_completed_at ? ' · ' + new Date(w.work_completed_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''}`));
+    }
+    const chk = logOnCheck(a);
+    box.append(el('button', { class: 'btn primary', disabled: !chk.ok, onclick: () => openLogOn(a) }, 'Log On'));
+    if (!chk.ok) box.append(el('div', { class: 'popup-note' }, chk.why));
+  }
+  return box;
+}
+
+// ---- photos
+
+async function compressImage(file, maxDim = 1600, quality = 0.82) {
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', quality));
+    if (blob) return blob;
+  } catch { /* fall back to the original file */ }
+  return file;
+}
+
+// A photo picker bound to a button, a hidden <input type=file> and a thumbnail strip
+function photoPicker(btnId, inputId, thumbsId, onChange) {
+  const photos = [];
+  const render = () => {
+    const t = $(thumbsId);
+    t.innerHTML = '';
+    photos.forEach((p, i) => t.append(el('div', { class: 'thumb' },
+      el('img', { src: p.url, alt: `Photo ${i + 1}` }),
+      el('button', { type: 'button', class: 'thumb-del', 'aria-label': `Remove photo ${i + 1}`, onclick: () => {
+        URL.revokeObjectURL(p.url); photos.splice(i, 1); render(); onChange();
+      } }, '×'))));
+    $(btnId).textContent = photos.length ? 'Take another photo' : 'Take photo';
+  };
+  $(btnId).addEventListener('click', () => $(inputId).click());
+  $(inputId).addEventListener('change', async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    for (const f of files) {
+      if (photos.length >= 10) { toast('Up to 10 photos'); break; }
+      const blob = await compressImage(f);
+      photos.push({ blob, url: URL.createObjectURL(blob) });
+    }
+    render(); onChange();
+  });
+  return {
+    get list() { return photos; },
+    reset() { photos.splice(0).forEach((p) => URL.revokeObjectURL(p.url)); render(); },
+  };
+}
+
+const safeName = (s) => String(s || 'asset').replace(/[\\/:*?"<>|#%{}^~\[\]`]+/g, '-').trim().slice(0, 80) || 'asset';
+const storageKey = (s) => s.replace(/[^A-Za-z0-9._-]+/g, '_');
+const newId = () => (crypto.randomUUID ? crypto.randomUUID()
+  : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  }));
+
+// Upload photos as "<asset name>_<tag>_<n>.jpg" under <user>/<job>/
+async function uploadPhotos(photos, workId, a, tag, setMsg) {
+  const uid = await S.api.userId();
+  if (!uid) throw new Error('Your session has ended. Sign in again.');
+  const out = [];
+  for (let i = 0; i < photos.length; i++) {
+    setMsg(`Uploading photo ${i + 1} of ${photos.length}…`);
+    const blob = photos[i].blob;
+    const ext = /png/.test(blob.type) ? 'png' : /heic|heif/.test(blob.type) ? 'heic' : 'jpg';
+    const fileName = `${safeName(a.name || a.asset_id)}_${tag}_${i + 1}.${ext}`;
+    const path = `${uid}/${workId}/${storageKey(fileName)}`;
+    await S.api.uploadPhoto(path, blob);
+    out.push({ path, file_name: fileName });
+  }
+  return out;
+}
+
+const friendlyError = (e) => {
+  const m = e?.message || String(e);
+  if (/fetch|network|load failed/i.test(m)) return 'No connection. Check your signal and try again.';
+  if (/JWT|session/i.test(m)) return 'Your session has ended. Sign out and sign in again.';
+  return m;
+};
+
+// ---- Log On
+
+let logOnAsset = null, beforePhotos = null;
+
+function openLogOn(a) {
+  if (!navigator.onLine) { toast('You need a connection to Log On.'); return; }
+  const chk = logOnCheck(a);
+  if (!chk.ok) { toast(chk.why, 4000); return; }
+  logOnAsset = a;
+  $('logon-title').textContent = C.logOnTitle || 'Inspect the joint';
+  $('logon-asset').textContent = a.name || a.asset_id;
+  $('issue-yes').checked = false;
+  $('issue-no').checked = false;
+  $('issue-comment').value = '';
+  beforePhotos.reset();
+  $('logon-msg').textContent = '';
+  updateLogOnForm();
+  $('dlg-logon').showModal();
+}
+
+function updateLogOnForm() {
+  const yes = $('issue-yes').checked, no = $('issue-no').checked;
+  $('issue-details').hidden = !yes;
+  const ok = no || (yes && $('issue-comment').value.trim() && beforePhotos.list.length > 0);
+  $('btn-logon-submit').disabled = !ok;
+  $('logon-hint').textContent = yes && !ok ? 'Add a comment and at least one photo to submit.' : '';
+}
+
+async function submitLogOn(e) {
+  e.preventDefault();
+  const a = logOnAsset;
+  const yes = $('issue-yes').checked;
+  const msg = (t, err = false) => { $('logon-msg').textContent = t; $('logon-msg').classList.toggle('error', err); };
+  const btn = $('btn-logon-submit');
+  btn.disabled = true;
+  try {
+    // Re-check distance with a fresh GPS position before uploading anything
+    msg('Checking your location…');
+    try { onFix(await getFreshFix()); } catch { /* use the last known position */ }
+    if (!S.fix || Date.now() - S.fix.time.getTime() > 120000) throw new Error('Could not get your current location. Check location is allowed and try again.');
+    const chk = logOnCheck(a);
+    if (!chk.ok) throw new Error(chk.why);
+    const workId = newId();
+    const photos = yes ? await uploadPhotos(beforePhotos.list, workId, a, 'before', msg) : [];
+    msg('Saving…');
+    const res = await S.api.logOn({
+      workId, layer: a.layer, assetId: a.asset_id, assetName: a.name, lat: a.lat, lon: a.lon,
+      issue: yes ? 'Yes' : 'No', issueComments: yes ? $('issue-comment').value.trim() : null, photos,
+      userLat: S.fix.lat, userLon: S.fix.lon, userAccuracy: S.fix.accuracy,
+    });
+    const job = { asset_layer: a.layer, asset_id: a.asset_id, work_id: workId, status: 'Open', is_mine: true,
+      field_worker_name: res?.field_worker_name, work_started_at: res?.work_started_at || new Date().toISOString() };
+    S.work[assetKey(a)] = job;
+    S.myOpen = [...S.myOpen.filter((j) => j.work_id !== workId),
+      { work_id: workId, asset_layer: a.layer, asset_id: a.asset_id, asset_name: a.name, asset_lat: a.lat, asset_lon: a.lon, work_started_at: job.work_started_at }];
+    $('dlg-logon').close();
+    renderActiveJobs();
+    refreshAssetOnMap(a);
+    toast(`Logged on to ${a.name || a.asset_id} · status OPEN`);
+  } catch (err) {
+    console.error(err);
+    msg(friendlyError(err), true);
+    updateLogOnForm();
+  }
+}
+
+// ---- Log Off
+
+let logOffAsset = null, afterPhotos = null;
+
+function openLogOff(a) {
+  if (!navigator.onLine) { toast('You need a connection to Log Off.'); return; }
+  logOffAsset = a;
+  $('logoff-asset').textContent = a.name || a.asset_id;
+  $('work-comment').value = '';
+  afterPhotos.reset();
+  $('logoff-msg').textContent = '';
+  updateLogOffForm();
+  $('dlg-logoff').showModal();
+}
+
+function updateLogOffForm() {
+  const ok = $('work-comment').value.trim() && afterPhotos.list.length > 0;
+  $('btn-logoff-submit').disabled = !ok;
+  $('logoff-hint').textContent = ok ? '' : 'Add at least one photo and a comment to submit.';
+}
+
+async function submitLogOff(e) {
+  e.preventDefault();
+  const a = logOffAsset;
+  const job = S.work[assetKey(a)] || S.myOpen.find((j) => j.asset_layer === a.layer && j.asset_id === a.asset_id);
+  const msg = (t, err = false) => { $('logoff-msg').textContent = t; $('logoff-msg').classList.toggle('error', err); };
+  if (!job?.work_id) { msg('Could not find the open job for this asset. Refresh and try again.', true); return; }
+  const btn = $('btn-logoff-submit');
+  btn.disabled = true;
+  try {
+    const photos = await uploadPhotos(afterPhotos.list, job.work_id, a, 'after', msg);
+    msg('Saving…');
+    const res = await S.api.logOff({ workId: job.work_id, comments: $('work-comment').value.trim(), photos });
+    S.work[assetKey(a)] = { ...job, status: 'Closed', is_mine: true, work_completed_at: res?.work_completed_at || new Date().toISOString() };
+    S.myOpen = S.myOpen.filter((j) => j.work_id !== job.work_id);
+    $('dlg-logoff').close();
+    renderActiveJobs();
+    refreshAssetOnMap(a);
+    const mins = res?.duration_of_work;
+    toast(`Logged off · status CLOSED${mins != null ? ` · ${Number(mins).toFixed(2)} min` : ''}`, 4000);
+  } catch (err) {
+    console.error(err);
+    msg(friendlyError(err), true);
+    updateLogOffForm();
+  }
+}
+
+function wireWorkForms() {
+  beforePhotos = photoPicker('btn-before-photo', 'in-before-photo', 'before-thumbs', updateLogOnForm);
+  afterPhotos = photoPicker('btn-after-photo', 'in-after-photo', 'after-thumbs', updateLogOffForm);
+  // Yes / No behave as a pair: ticking one clears the other
+  $('issue-yes').addEventListener('change', () => { if ($('issue-yes').checked) $('issue-no').checked = false; updateLogOnForm(); });
+  $('issue-no').addEventListener('change', () => { if ($('issue-no').checked) $('issue-yes').checked = false; updateLogOnForm(); });
+  $('issue-comment').addEventListener('input', updateLogOnForm);
+  $('work-comment').addEventListener('input', updateLogOffForm);
+  $('form-logon').addEventListener('submit', submitLogOn);
+  $('form-logoff').addEventListener('submit', submitLogOff);
+  $('btn-logon-cancel').addEventListener('click', () => $('dlg-logon').close());
+  $('btn-logoff-cancel').addEventListener('click', () => $('dlg-logoff').close());
 }
 
 // ---------------------------------------------------------------------------
@@ -648,6 +1037,7 @@ async function init() {
 
   wireLogin();
   wireChangePassword();
+  wireWorkForms();
   $('btn-refresh').addEventListener('click', findNearMe);
   $('tab-list').addEventListener('click', () => selectTab('list'));
   $('tab-map').addEventListener('click', () => selectTab('map'));

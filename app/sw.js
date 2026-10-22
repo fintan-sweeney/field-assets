@@ -1,11 +1,11 @@
 // Field Assets service worker: lets the app open with no signal.
 // Bump VERSION whenever you deploy changes so phones pick them up.
-const VERSION = 'v7';
+const VERSION = 'v9';
 const SHELL = `fa-shell-${VERSION}`;
 const RUNTIME = `fa-runtime-${VERSION}`;
 
 const SHELL_FILES = [
-  './', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
+  './', 'index.html', 'styles.css', 'work.css', 'app.js', 'config.js', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 

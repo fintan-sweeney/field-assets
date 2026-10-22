@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="work.css">
   <style>
     /* Password boxes match the other inputs (kept here so styles.css is unchanged) */
     input[type=password] {
@@ -101,6 +102,7 @@
           Find Assets Near Me
         </button>
       </div>
+      <div id="active-jobs" class="active-jobs" hidden></div>
     </div>
 
     <nav class="tabs" role="tablist">
@@ -148,6 +150,49 @@
     </form>
   </dialog>
 
+
+  <!-- Log On: integrity report -->
+  <dialog id="dlg-logon" class="sheet work-sheet">
+    <form id="form-logon" class="stack" method="dialog">
+      <h2 id="logon-title">Inspect the joint</h2>
+      <p id="logon-asset" class="work-asset"></p>
+      <p class="work-question">Is there a data integrity issue?</p>
+      <div class="yes-no">
+        <label class="check"><input type="checkbox" id="issue-yes"> Yes</label>
+        <label class="check"><input type="checkbox" id="issue-no"> No</label>
+      </div>
+      <div id="issue-details" class="stack" hidden>
+        <label for="issue-comment">Comment on the issue</label>
+        <textarea id="issue-comment" rows="3" placeholder="Describe the integrity issue"></textarea>
+        <label>Photos of the issue <span class="muted">(before photos, at least one)</span></label>
+        <div id="before-thumbs" class="thumbs"></div>
+        <button type="button" id="btn-before-photo" class="btn">Take photo</button>
+        <input type="file" id="in-before-photo" accept="image/*" capture="environment" hidden>
+      </div>
+      <p id="logon-hint" class="tiny muted"></p>
+      <p id="logon-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-logon-submit" class="btn primary" disabled>Submit</button>
+      <button type="button" id="btn-logon-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Off: close out the work -->
+  <dialog id="dlg-logoff" class="sheet work-sheet">
+    <form id="form-logoff" class="stack" method="dialog">
+      <h2>Close out the work</h2>
+      <p id="logoff-asset" class="work-asset"></p>
+      <label>Photos of the completed work <span class="muted">(after photos, at least one)</span></label>
+      <div id="after-thumbs" class="thumbs"></div>
+      <button type="button" id="btn-after-photo" class="btn">Take photo</button>
+      <input type="file" id="in-after-photo" accept="image/*" capture="environment" hidden>
+      <label for="work-comment">Work comments</label>
+      <textarea id="work-comment" rows="3" placeholder="What work was carried out?"></textarea>
+      <p id="logoff-hint" class="tiny muted"></p>
+      <p id="logoff-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-logoff-submit" class="btn primary" disabled>Submit</button>
+      <button type="button" id="btn-logoff-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
