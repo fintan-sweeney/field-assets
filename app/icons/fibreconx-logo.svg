@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 9 72 52" role="img" aria-label="FibreconX">
+  <defs>
+    <!-- crescent: outer circle minus inner circle, open on the left -->
+    <mask id="fx-crescent" maskUnits="userSpaceOnUse" x="0" y="0" width="80" height="70">
+      <circle cx="51" cy="34.75" r="25" fill="#fff"/>
+      <circle cx="51" cy="34.75" r="18" fill="#000"/>
+      <rect x="0" y="16.75" width="51" height="36" fill="#000"/>
+    </mask>
+    <mask id="fx-hole" maskUnits="userSpaceOnUse" x="0" y="0" width="80" height="70">
+      <rect x="0" y="0" width="80" height="70" fill="#fff"/>
+      <circle cx="51" cy="34.75" r="7.2" fill="#000"/>
+    </mask>
+  </defs>
+  <rect x="0" y="0" width="80" height="70" fill="#fdfefe" mask="url(#fx-crescent)"/>
+  <g fill="#c2e7ea" mask="url(#fx-hole)">
+    <circle cx="51" cy="34.75" r="14"/>
+    <rect x="21" y="20.75" width="30" height="4"/>
+    <rect x="6"  y="32.75" width="45" height="4"/>
+    <rect x="21" y="44.75" width="30" height="4"/>
+  </g>
+</svg>
