@@ -6,7 +6,7 @@
   --closed: #ff8c1a;        /* recently closed (7 days): bright orange */
   --closed-ink: #c2410c;
   --closed-bg: #ffedd5;
-  --idle: #2563eb;          /* no recent job: blue */
+  --idle: #22c55e;          /* no recent job: bright green */
 }
 /* Always use the light theme, even when the phone is set to dark mode */
 :root { color-scheme: light; }
@@ -168,3 +168,17 @@ textarea:focus { outline: none; border-color: var(--brand); }
 
 /* ---- list item title: the asset name is the main label ---- */
 .asset-head .asset-name { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+
+/* ---- map key (legend), bottom-left of the map ---- */
+.map-panel { position: relative; }
+.map-legend {
+  position: absolute; left: 26px; bottom: calc(env(safe-area-inset-bottom) + 26px); z-index: 450;
+  display: flex; flex-direction: column; gap: 5px;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgba(255, 255, 255, .94); box-shadow: 0 1px 6px rgba(0, 0, 0, .25);
+  font-size: .8rem; font-weight: 700; color: #0e1a1b; pointer-events: none;
+}
+.map-legend > div { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 14px; height: 14px; margin: 0; }
+.map-legend .legend-open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.map-legend .legend-you { border-width: 2px; }
