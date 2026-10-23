@@ -173,13 +173,13 @@
     <form id="form-logon" class="stack" method="dialog">
       <h2>Log On</h2>
       <p id="logon-asset" class="work-asset"></p>
-      <p class="work-question">Enter at least one of the following:</p>
       <label for="in-circuit">Circuit ID</label>
       <input id="in-circuit" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
       <label for="in-project">Project ID</label>
       <input id="in-project" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
       <label for="in-fault">Fault ID</label>
       <input id="in-fault" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <p class="work-question logon-note">(Enter at least one ID to proceed)</p>
       <p id="logon-hint" class="tiny muted"></p>
       <p id="logon-msg" class="msg" role="status"></p>
       <button type="submit" id="btn-logon-submit" class="btn primary" disabled>Log On</button>
