@@ -1,14 +1,15 @@
 /* Field Assets - Log On / Log Off styles (kept separate from styles.css) */
 
 :root {
-  --open: #e8590c;          /* active / open job: strong orange */
-  --open-bg: #fff0e6;
-  --closed: #1d7a46;        /* closed job: green */
-  --closed-bg: #dcf2e4;
-  --idle: #0f3d3e;          /* asset with no job */
+  --open: #d92d20;          /* open job: red */
+  --open-bg: #fde8e7;
+  --closed: #f59e0b;        /* recently closed (7 days): amber */
+  --closed-ink: #7a4100;
+  --closed-bg: #fff3d6;
+  --idle: #2563eb;          /* no recent job: blue */
 }
 @media (prefers-color-scheme: dark) {
-  :root { --open: #ff8a3d; --open-bg: #3a1f0d; --closed: #5fd68f; --closed-bg: #12301f; --idle: #5cc2c4; }
+  :root { --open: #f04438; --open-bg: #3b1412; --closed: #fbbf24; --closed-ink: #fcd34d; --closed-bg: #3a2a0a; --idle: #4f8cff; }
 }
 
 /* ---- status tags (list, popup, banner) ---- */
@@ -18,7 +19,7 @@
   vertical-align: middle;
 }
 .work-tag.open   { background: var(--open);   color: #fff; }
-.work-tag.closed { background: var(--closed); color: #fff; }
+.work-tag.closed { background: var(--closed); color: #3b2300; }
 
 /* ---- map markers ---- */
 .asset-marker {
@@ -30,7 +31,7 @@
 .asset-marker.open {
   width: 20px; height: 20px; margin: -2px 0 0 -2px;
   background: var(--open); border-width: 3px;
-  box-shadow: 0 0 0 0 rgba(232, 89, 12, .6);
+  box-shadow: 0 0 0 0 rgba(217, 45, 32, .6);
   animation: open-pulse 1.8s ease-out infinite;
 }
 .asset-marker.open span {
@@ -40,23 +41,47 @@
   white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.35);
 }
 @keyframes open-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(232, 89, 12, .6); }
-  70%  { box-shadow: 0 0 0 14px rgba(232, 89, 12, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(232, 89, 12, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(217, 45, 32, .6); }
+  70%  { box-shadow: 0 0 0 14px rgba(217, 45, 32, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(217, 45, 32, 0); }
 }
 
-/* ---- map popup ---- */
-.popup { display: flex; flex-direction: column; gap: 4px; min-width: 200px; }
-.popup-title { font-size: 1rem; }
-.popup .muted { color: #55605f; }
-.popup-status { margin: 6px 0 2px; padding: 6px 8px; border-radius: 8px; font-weight: 700; font-size: .88rem; }
-.popup-status.open   { background: var(--open-bg);   color: var(--open); }
-.popup-status.closed { background: var(--closed-bg); color: var(--closed); }
-.popup .btn { margin-top: 6px; min-height: 46px; width: 100%; }
-.popup .btn:disabled { opacity: .45; }
-.popup-note { margin-top: 4px; font-size: .85rem; font-weight: 600; color: #8a4b00; }
+/* ---- map popup (compact) ---- */
+.leaflet-popup-content { margin: 8px 10px; line-height: 1.3; }
+.leaflet-popup-content-wrapper { border-radius: 10px; }
+.popup { display: flex; flex-direction: column; gap: 3px; font-size: .82rem; }
+.popup-title { font-size: .92rem; display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.popup-title .work-tag { margin-left: 6px; font-size: .62rem; padding: 0 6px; }
+.popup-sub { color: #55605f; }
+.popup .btn { margin-top: 4px; width: 100%; }
+.popup .btn:disabled, .asset-work-actions .btn:disabled { opacity: .45; }
+.popup-note { margin-top: 2px; font-size: .78rem; font-weight: 600; color: #8a4b00; }
 .btn.danger-fill { background: var(--open); border-color: var(--open); color: #fff; }
-.btn.small { min-height: 38px; padding: 0 12px; font-size: .9rem; }
+.btn.logon-btn { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.small { min-height: 34px; padding: 0 10px; font-size: .85rem; border-radius: 9px; }
+
+/* ---- list: who opened / closed ---- */
+.asset-work { grid-column: 1 / -1; font-size: .85rem; font-weight: 700; }
+.asset-work.open   { color: var(--open); }
+.asset-work.closed { color: var(--closed-ink); }
+.asset-work-actions { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
+.asset-work-actions .btn { min-height: 48px; }
+
+/* ---- Log Incident button ---- */
+.incident-btn { background: transparent; color: var(--open); border-color: var(--open); }
+.actions .btn { padding: 0 12px; font-size: .95rem; gap: 6px; white-space: nowrap; }
+@media (max-width: 400px) { .incident-btn svg { display: none; } }
+
+/* ---- Distance dropdown (styled like the old Find Assets button) ---- */
+.distance-btn { position: relative; justify-content: center; gap: 4px; cursor: pointer; }
+.distance-label { white-space: nowrap; }
+.distance-arrow { flex: none; margin-right: -6px; }
+.distance-btn select {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; font-size: 16px;   /* invisible, but opens the phone's picker */
+  border: 0; appearance: none; -webkit-appearance: none;
+}
+.distance-btn:focus-within { outline: 3px solid var(--accent, #f2711c); outline-offset: 2px; }
 
 /* ---- "you're logged on" banner ---- */
 .active-jobs { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }

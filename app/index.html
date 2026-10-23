@@ -23,7 +23,7 @@
     }
     input[type=password]:focus { outline: none; border-color: var(--brand); }
     /* One main button across the full width; hide the status row when it's empty */
-    .actions { grid-template-columns: 1fr; }
+    .actions { grid-template-columns: 1fr 1fr; gap: 8px; }
     .status-row:not(:has(.pill:not([hidden]))) { display: none; }
   </style>
   <script src="config.js"></script>
@@ -93,11 +93,27 @@
       <div class="status-row">
         <span id="offline-pill" class="pill warn" hidden>Offline</span>
       </div>
-      <div id="position-text" class="position">Waiting for location…</div>
+      <div id="position-text" class="position" hidden></div>
       <div class="actions">
-        <button id="btn-refresh" class="btn primary big">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm8.94 3A8.99 8.99 0 0 0 13 3.06V1h-2v2.06A8.99 8.99 0 0 0 3.06 11H1v2h2.06A8.99 8.99 0 0 0 11 20.94V23h2v-2.06A8.99 8.99 0 0 0 20.94 13H23v-2h-2.06zM12 19a7 7 0 1 1 0-14 7 7 0 0 1 0 14z"/></svg>
-          Find Assets Near Me
+        <label class="btn primary big distance-btn" for="sel-distance">
+          <span class="distance-label">Distance</span>
+          <svg class="distance-arrow" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+          <select id="sel-distance" aria-label="Distance">
+          <option value="50">50 metres</option>
+          <option value="100">100 metres</option>
+          <option value="150">150 metres</option>
+          <option value="200">200 metres</option>
+          <option value="250">250 metres</option>
+          <option value="300">300 metres</option>
+          <option value="350">350 metres</option>
+          <option value="400">400 metres</option>
+          <option value="450">450 metres</option>
+          <option value="500">500 metres</option>
+          </select>
+        </label>
+        <button id="btn-incident" class="btn big incident-btn" type="button">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+          Log Incident
         </button>
       </div>
       <div id="active-jobs" class="active-jobs" hidden></div>
@@ -122,19 +138,6 @@
     <form method="dialog" class="stack">
       <h2>Settings</h2>
       <div id="user-info" class="muted"></div>
-      <label for="set-radius">Search radius</label>
-      <select id="set-radius">
-        <option value="25">25 m</option>
-        <option value="50">50 m</option>
-        <option value="75">75 m</option>
-        <option value="100">100 m</option>
-        <option value="125">125 m</option>
-        <option value="150">150 m</option>
-        <option value="175">175 m</option>
-        <option value="200">200 m</option>
-        <option value="225">225 m</option>
-        <option value="250">250 m</option>
-      </select>
       <div id="pw-change-section" class="stack" hidden>
         <label for="pw-new">Change password</label>
         <input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">
@@ -149,46 +152,58 @@
   </dialog>
 
 
-  <!-- Log On: integrity report -->
+  <!-- Log On: job reference -->
   <dialog id="dlg-logon" class="sheet work-sheet">
     <form id="form-logon" class="stack" method="dialog">
-      <h2 id="logon-title">Inspect the joint</h2>
+      <h2>Log On</h2>
       <p id="logon-asset" class="work-asset"></p>
-      <p class="work-question">Is there a data integrity issue?</p>
-      <div class="yes-no">
-        <label class="check"><input type="checkbox" id="issue-yes"> Yes</label>
-        <label class="check"><input type="checkbox" id="issue-no"> No</label>
-      </div>
-      <div id="issue-details" class="stack" hidden>
-        <label for="issue-comment">Comment on the issue</label>
-        <textarea id="issue-comment" rows="3" placeholder="Describe the integrity issue"></textarea>
-        <label>Photos of the issue <span class="muted">(before photos, at least one)</span></label>
-        <div id="before-thumbs" class="thumbs"></div>
-        <button type="button" id="btn-before-photo" class="btn">Take photo</button>
-        <input type="file" id="in-before-photo" accept="image/*" capture="environment" hidden>
-      </div>
+      <p class="work-question">Enter at least one of the following:</p>
+      <label for="in-circuit">Circuit ID</label>
+      <input id="in-circuit" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <label for="in-project">Project ID</label>
+      <input id="in-project" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <label for="in-fault">Fault ID</label>
+      <input id="in-fault" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
       <p id="logon-hint" class="tiny muted"></p>
       <p id="logon-msg" class="msg" role="status"></p>
-      <button type="submit" id="btn-logon-submit" class="btn primary" disabled>Submit</button>
+      <button type="submit" id="btn-logon-submit" class="btn primary" disabled>Log On</button>
       <button type="button" id="btn-logon-cancel" class="btn">Cancel</button>
     </form>
   </dialog>
 
-  <!-- Log Off: close out the work -->
+  <!-- Log Off: describe the work -->
   <dialog id="dlg-logoff" class="sheet work-sheet">
     <form id="form-logoff" class="stack" method="dialog">
-      <h2>Close out the work</h2>
+      <h2>Log Off</h2>
       <p id="logoff-asset" class="work-asset"></p>
-      <label>Photos of the completed work <span class="muted">(after photos, at least one)</span></label>
-      <div id="after-thumbs" class="thumbs"></div>
-      <button type="button" id="btn-after-photo" class="btn">Take photo</button>
-      <input type="file" id="in-after-photo" accept="image/*" capture="environment" hidden>
-      <label for="work-comment">Work comments</label>
-      <textarea id="work-comment" rows="3" placeholder="What work was carried out?"></textarea>
+      <label for="work-comment">Describe the work carried out</label>
+      <textarea id="work-comment" rows="4" placeholder="What work was carried out?"></textarea>
       <p id="logoff-hint" class="tiny muted"></p>
       <p id="logoff-msg" class="msg" role="status"></p>
-      <button type="submit" id="btn-logoff-submit" class="btn primary" disabled>Submit</button>
+      <button type="submit" id="btn-logoff-submit" class="btn primary" disabled>Log Off</button>
       <button type="button" id="btn-logoff-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Incident: fault or network issue -->
+  <dialog id="dlg-incident" class="sheet work-sheet">
+    <form id="form-incident" class="stack" method="dialog">
+      <h2>Log Incident</h2>
+      <p class="muted tiny" id="incident-location">Your current location will be recorded with the report.</p>
+      <label for="in-incident-type">Type of incident</label>
+      <select id="in-incident-type">
+        <option value="">Choose…</option>
+      </select>
+      <label for="in-incident-comment">Report</label>
+      <textarea id="in-incident-comment" rows="4" placeholder="Describe the fault or network issue"></textarea>
+      <label>Photos <span class="muted">(at least one)</span></label>
+      <div id="incident-thumbs" class="thumbs"></div>
+      <button type="button" id="btn-incident-photo" class="btn">Take photo</button>
+      <input type="file" id="in-incident-photo" accept="image/*" capture="environment" hidden>
+      <p id="incident-hint" class="tiny muted"></p>
+      <p id="incident-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-incident-submit" class="btn primary" disabled>Submit report</button>
+      <button type="button" id="btn-incident-cancel" class="btn">Cancel</button>
     </form>
   </dialog>
 

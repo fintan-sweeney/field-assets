@@ -121,19 +121,19 @@ async function supabaseBackend() {
     async logOn(p) {
       const { data, error } = await sb.rpc('log_on', {
         p_work_id: p.workId, p_layer: p.layer, p_asset_id: p.assetId, p_lat: p.lat, p_lon: p.lon,
-        p_issue: p.issue, p_issue_comments: p.issueComments, p_photos: p.photos,
+        p_circuit_id: p.circuitId, p_project_id: p.projectId, p_fault_id: p.faultId,
         p_user_lat: p.userLat, p_user_lon: p.userLon, p_user_accuracy: p.userAccuracy,
       });
       if (error) throw error;
       return data;
     },
     async logOff(p) {
-      const { data, error } = await sb.rpc('log_off', { p_work_id: p.workId, p_comments: p.comments, p_photos: p.photos });
+      const { data, error } = await sb.rpc('log_off', { p_work_id: p.workId, p_comments: p.comments });
       if (error) throw error;
       return data;
     },
     async workStatus(keys) {
-      const { data, error } = await sb.rpc('asset_work_status', { p_assets: keys, p_closed_days: CLOSED_DAYS });
+      const { data, error } = await sb.rpc('asset_work_status', { p_assets: keys, p_closed_days: SETTINGS.closed_visible_days });
       if (error) throw error;
       return data || [];
     },
@@ -141,6 +141,19 @@ async function supabaseBackend() {
       const { data, error } = await sb.rpc('my_open_work');
       if (error) throw error;
       return data || [];
+    },
+    async settings() {
+      const { data, error } = await sb.rpc('app_settings');
+      if (error) throw error;
+      return data;
+    },
+    async logIncident(p) {
+      const { data, error } = await sb.rpc('log_incident', {
+        p_id: p.id, p_type: p.type, p_comments: p.comments,
+        p_lat: p.lat, p_lon: p.lon, p_accuracy: p.accuracy, p_photos: p.photos,
+      });
+      if (error) throw error;
+      return data;
     },
   };
 }
@@ -198,9 +211,9 @@ function demoBackend() {
       const jobs = store.get('demo_jobs', {});
       const key = `${p.layer}|${p.assetId}`;
       if (jobs[key]?.status === 'Open') throw new Error('This asset is already open');
-      if (p.issue === 'Yes' && (!p.issueComments || !p.photos.length)) throw new Error('A comment and photo are required');
+      if (!p.circuitId && !p.projectId && !p.faultId) throw new Error('Enter a Circuit ID, Project ID or Fault ID to log on');
       const dist = haversine(p.userLat, p.userLon, p.lat, p.lon);
-      if (dist > LOGON_MAX_M) throw new Error(`You are ${Math.round(dist)} m from this asset. You must be within ${LOGON_MAX_M} m to log on.`);
+      if (dist > SETTINGS.logon_max_distance_m) throw new Error(`You are ${Math.round(dist)} m from this asset. You must be within ${SETTINGS.logon_max_distance_m} m to log on.`);
       const job = { asset_layer: p.layer, asset_id: p.assetId, work_id: p.workId, status: 'Open', is_mine: true,
         field_worker_name: 'Demo User', work_started_at: new Date().toISOString(), work_completed_at: null,
         asset_name: p.assetName, asset_lat: p.lat, asset_lon: p.lon };
@@ -213,10 +226,11 @@ function demoBackend() {
       const job = Object.values(jobs).find((j) => j.work_id === p.workId);
       if (!job || job.status !== 'Open') throw new Error('Job not found or already closed');
       const done = new Date();
-      job.status = 'Closed'; job.work_completed_at = done.toISOString();
+      if (!p.comments) throw new Error('Enter a comment describing the work carried out');
+      job.status = 'Closed'; job.work_completed_at = done.toISOString(); job.closed_by_name = 'Demo User';
       job.duration_mins = Math.round((done - new Date(job.work_started_at)) / 600) / 100;
       store.set('demo_jobs', jobs);
-      return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_mins: job.duration_mins };
+      return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_mins: job.duration_mins, closed_by_name: 'Demo User' };
     },
     async workStatus(keys) {
       const jobs = store.get('demo_jobs', {});
@@ -225,6 +239,13 @@ function demoBackend() {
     async myOpenWork() {
       return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open')
         .map((j) => ({ ...j, work_id: j.work_id }));
+    },
+    async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 7 }; },
+    async logIncident(p) {
+      await new Promise((r) => setTimeout(r, 200));
+      if (!p.type || !p.comments || !p.photos.length) throw new Error('Choose a type, describe the incident and add a photo');
+      console.info('[demo] incident', JSON.stringify({ type: p.type, comments: p.comments, photos: p.photos.length }));
+      return { incident_id: p.id };
     },
   };
 }
@@ -256,8 +277,8 @@ const S = {
 // App name in the banner (older config.js files still say 'Field Assets')
 const APP_NAME = (!C.appName || C.appName === 'Field Assets') ? 'FibreconX Field App' : C.appName;
 const CLOSED_DAYS = Number.isFinite(C.showClosedForDays) ? C.showClosedForDays : 7;
-// Must match v_max_distance_m in the database log_on function (06_work_logs.sql)
-const LOGON_MAX_M = Number.isFinite(C.logOnMaxDistanceM) ? C.logOnMaxDistanceM : 500;
+// Log On distance etc. come from the database (app_settings in 06_work_logs.sql); these are fallbacks
+const SETTINGS = { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: CLOSED_DAYS };
 const assetKey = (a) => `${a.layer}|${a.asset_id}`;
 
 // ---------------------------------------------------------------------------
@@ -313,6 +334,7 @@ async function enterApp() {
   renderList();
   updateStatus();
   startWatching();
+  loadSettings();
   loadMyOpenWork();
 }
 
@@ -445,6 +467,7 @@ async function signOut() {
 function startWatching() {
   if (!('geolocation' in navigator)) {
     $('position-text').textContent = 'This device or browser cannot provide location.';
+    $('position-text').hidden = false;
     return;
   }
   if (S.watchId !== null) return;
@@ -461,6 +484,7 @@ function stopWatching() {
 function onFixError(err) {
   const t = $('position-text');
   if (err.code === err.PERMISSION_DENIED) {
+    t.hidden = false;
     t.innerHTML = '';
     t.append(el('strong', {}, 'Location is blocked. '), 'Allow location for this app in your phone\'s settings (or browser site settings), then reopen it.');
     stopWatching();
@@ -489,7 +513,7 @@ function onFix(pos) {
 // "Find Assets Near Me": get a fresh GPS fix, then search
 function findNearMe() {
   if (!('geolocation' in navigator)) { toast('This device cannot provide location.'); return; }
-  const btn = $('btn-refresh');
+  const btn = $('sel-distance');
   btn.disabled = true;
   navigator.geolocation.getCurrentPosition(
     (pos) => { btn.disabled = false; onFix(pos); if (!S.querying) runQuery(); },
@@ -516,7 +540,6 @@ async function runQuery() {
   if (!f) { toast('Waiting for your location…'); return; }
   if (!navigator.onLine) { toast('Offline - showing the last list'); return; }
   S.querying = true;
-  $('btn-refresh').disabled = true;
   $('list-summary').textContent = 'Searching…';
   try {
     const rows = await S.api.nearest(f.lat, f.lon, C.maxResults, S.radius);
@@ -534,7 +557,6 @@ async function runQuery() {
     renderList();
   } finally {
     S.querying = false;
-    $('btn-refresh').disabled = false;
   }
 }
 
@@ -556,7 +578,7 @@ function renderList() {
     summary.textContent = '';
     list.append(el('li', { class: 'empty' },
       S.lastQuery ? `No assets within ${fmtDist(S.radius)}. Try a larger radius in Settings.`
-                  : S.fix ? 'Tap "Find Assets Near Me" to see what\'s around you.' : 'Waiting for your location…'));
+                  : S.fix ? 'Choose a distance to see what\'s around you.' : 'Waiting for your location…'));
     return;
   }
 
@@ -572,10 +594,7 @@ function renderList() {
     } },
       el('span', { class: 'asset-name' }, a.name || a.asset_id, workTag(S.work[key])),
       el('span', { class: 'asset-dist', 'data-key': key }, fmtDist(d), el('small', {}, dir || '')),
-      el('span', { class: 'asset-meta' },
-        el('span', {}, a.asset_type || a.layer),
-        a.status ? el('span', { class: 'status-tag' }, a.status) : null,
-        el('span', {}, a.asset_id)),
+      S.work[key] ? el('span', { class: `asset-work ${S.work[key].status === 'Open' ? 'open' : 'closed'}` }, workLine(S.work[key])) : null,
     );
     const li = el('li', { class: 'asset' }, head);
 
@@ -585,6 +604,7 @@ function renderList() {
       const dl = el('dl', {}, rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, fmtValue(v))]));
       const dest = `${a.lat},${a.lon}`;
       li.append(el('div', { class: 'asset-body' }, dl,
+        el('div', { class: 'asset-work-actions' }, ...workButton(a)),
         el('div', { class: 'asset-actions' },
           el('button', { class: 'btn primary', onclick: () => showOnMap(a) }, 'Show on map'),
           el('a', { class: 'btn', href: `https://www.google.com/maps/dir/?api=1&destination=${dest}`, target: '_blank', rel: 'noopener' }, 'Directions'),
@@ -655,7 +675,7 @@ function renderMapAssets() {
     const m = L.marker([a.lat, a.lon], {
       icon: L.divIcon({ className: '', html, iconSize: [18, 18], iconAnchor: [9, 9] }),
       zIndexOffset: st === 'open' ? 1000 : 0,
-    }).bindPopup(() => buildPopup(a), { minWidth: 220 }).addTo(g);
+    }).bindPopup(() => buildPopup(a), { minWidth: 150, maxWidth: 210, autoPanPadding: [20, 20] }).addTo(g);
     m.on('popupopen', () => { S.popup = { a, m, why: logOnCheck(a).why || '' }; });
     m.on('popupclose', () => { if (S.popup?.m === m) S.popup = null; });
     S.markers[key] = m;
@@ -704,12 +724,28 @@ function selectTab(which) {
 }
 
 // ---------------------------------------------------------------------------
-// Work logs: Log On (integrity report) and Log Off (close-out)
+// Work logs (Log On / Log Off) and incidents
 // ---------------------------------------------------------------------------
 
 function workTag(w) {
   if (!w) return null;
   return el('span', { class: `work-tag ${w.status === 'Open' ? 'open' : 'closed'}` }, w.status.toUpperCase());
+}
+
+// "10:41 am" for today, otherwise "22/10 10:41 am"
+function fmtWhen(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const today = new Date().toDateString() === d.toDateString();
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return today ? t : `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${t}`;
+}
+
+// "Opened by Bob · 10:41 am" / "Closed by Bob · 22/10 3:05 pm"
+function workLine(w) {
+  if (!w) return '';
+  if (w.status === 'Open') return `Opened by ${w.is_mine ? 'you' : (w.field_worker_name || 'another user')} · ${fmtWhen(w.work_started_at)}`;
+  return `Closed by ${w.is_mine && !w.closed_by_name ? 'you' : (w.closed_by_name || w.field_worker_name || 'another user')} · ${fmtWhen(w.work_completed_at)}`;
 }
 
 async function refreshWorkStatus() {
@@ -723,12 +759,16 @@ async function refreshWorkStatus() {
   }
 }
 
+async function loadSettings() {
+  try { Object.assign(SETTINGS, await S.api.settings() || {}); } catch (e) { console.warn('Using default settings', e); }
+}
+
 async function loadMyOpenWork() {
   try { S.myOpen = await S.api.myOpenWork(); } catch (e) { console.warn(e); }
   renderActiveJobs();
 }
 
-// Banner under the main button: "You're logged on to Joint 0001 since 9:14"
+// Banner under the main buttons: "You're logged on to Joint 0001 since 9:14"
 function renderActiveJobs() {
   const box = $('active-jobs');
   box.innerHTML = '';
@@ -749,42 +789,52 @@ function renderActiveJobs() {
 
 // Can the person log on to this asset from where they are now?
 function logOnCheck(a) {
+  const max = SETTINGS.logon_max_distance_m, acc = SETTINGS.logon_max_gps_accuracy_m;
   if (!S.fix) return { ok: false, why: 'Waiting for your location…' };
-  if (S.fix.accuracy > LOGON_MAX_M) {
+  if (S.fix.accuracy > acc) {
     return { ok: false, why: `GPS signal too weak (±${Math.round(S.fix.accuracy)} m). Move outside or wait for a better signal.` };
   }
   const d = haversine(S.fix.lat, S.fix.lon, a.lat, a.lon);
-  if (d > LOGON_MAX_M) return { ok: false, why: `You're ${fmtDist(d)} away. Move within ${fmtDist(LOGON_MAX_M)} to log on.` };
+  if (d > max) return { ok: false, why: `You're ${fmtDist(d)} away. Move within ${fmtDist(max)} to log on.` };
   return { ok: true, d };
 }
 
 const getFreshFix = () => new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(
   resolve, reject, { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }));
 
-function buildPopup(a) {
-  const key = assetKey(a);
-  const w = S.work[key];
-  const { d } = liveDistance(a);
-  const box = el('div', { class: 'popup' },
-    el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id), workTag(w)),
-    el('div', { class: 'muted' }, `${a.asset_type || a.layer}${a.status ? ' · ' + a.status : ''}`),
-    d != null ? el('div', { class: 'muted' }, fmtDist(d)) : null);
-
-  if (w?.status === 'Open') {
-    const who = w.is_mine ? 'You' : (w.field_worker_name || 'Another user');
-    box.append(el('div', { class: 'popup-status open' },
-      `Status: OPEN · ${who} logged on at ${fmtTime(new Date(w.work_started_at))}`));
-    if (w.is_mine) box.append(el('button', { class: 'btn danger-fill', onclick: () => openLogOff(a) }, 'Log Off'));
-  } else {
-    if (w?.status === 'Closed') {
-      box.append(el('div', { class: 'popup-status closed' },
-        `Status: CLOSED${w.work_completed_at ? ' · ' + new Date(w.work_completed_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''}`));
-    }
-    const chk = logOnCheck(a);
-    box.append(el('button', { class: 'btn primary', disabled: !chk.ok, onclick: () => openLogOn(a) }, 'Log On'));
-    if (!chk.ok) box.append(el('div', { class: 'popup-note' }, chk.why));
+// Fresh GPS position (or a recent one) before saving anything
+async function currentFix(msg) {
+  msg('Checking your location…');
+  try { onFix(await getFreshFix()); } catch { /* fall back to the last known position */ }
+  if (!S.fix || Date.now() - S.fix.time.getTime() > 120000) {
+    throw new Error('Could not get your current location. Check location is allowed and try again.');
   }
-  return box;
+  return S.fix;
+}
+
+// Log On / Log Off button (+ reason if not allowed), used in the list and the map popup
+function workButton(a, compact = false) {
+  const w = S.work[assetKey(a)];
+  const cls = compact ? ' small' : '';
+  if (w?.status === 'Open') {
+    return w.is_mine ? [el('button', { class: `btn danger-fill${cls}`, onclick: () => openLogOff(a) }, 'Log Off')] : [];
+  }
+  const chk = logOnCheck(a);
+  return [
+    el('button', { class: `btn logon-btn${cls}`, disabled: !chk.ok, onclick: () => openLogOn(a) }, 'Log On'),
+    chk.ok ? null : el('div', { class: 'popup-note' }, chk.why),
+  ];
+}
+
+// Small, tidy popup for the map
+function buildPopup(a) {
+  const w = S.work[assetKey(a)];
+  const { d } = liveDistance(a);
+  return el('div', { class: 'popup' },
+    el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id), workTag(w)),
+    el('div', { class: 'popup-sub' },
+      w ? workLine(w) : [a.name && a.name !== a.asset_id ? a.asset_id : (a.asset_type || a.layer), d != null ? ` · ${fmtDist(d)}` : '']),
+    ...workButton(a, true));
 }
 
 // ---- photos
@@ -841,8 +891,9 @@ const newId = () => (crypto.randomUUID ? crypto.randomUUID()
     const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   }));
 
-// Upload photos as "<asset name>_<tag>_<n>.jpg" under <user>/<job>/
-async function uploadPhotos(photos, workId, a, tag, setMsg) {
+// Upload photos as "<base>_<n>.jpg" under <user>/<record id>/
+async function uploadPhotos(photos, recordId, base, setMsg) {
+  if (!photos.length) return [];
   const uid = await S.api.userId();
   if (!uid) throw new Error('Your session has ended. Sign in again.');
   const out = [];
@@ -850,8 +901,8 @@ async function uploadPhotos(photos, workId, a, tag, setMsg) {
     setMsg(`Uploading photo ${i + 1} of ${photos.length}…`);
     const blob = photos[i].blob;
     const ext = /png/.test(blob.type) ? 'png' : /heic|heif/.test(blob.type) ? 'heic' : 'jpg';
-    const fileName = `${safeName(a.name || a.asset_id)}_${tag}_${i + 1}.${ext}`;
-    const path = `${uid}/${workId}/${storageKey(fileName)}`;
+    const fileName = `${safeName(base)}_${i + 1}.${ext}`;
+    const path = `${uid}/${recordId}/${storageKey(fileName)}`;
     await S.api.uploadPhoto(path, blob);
     out.push({ path, file_name: fileName });
   }
@@ -864,56 +915,48 @@ const friendlyError = (e) => {
   if (/JWT|session/i.test(m)) return 'Your session has ended. Sign out and sign in again.';
   return m;
 };
+const formMsg = (id) => (t, err = false) => { $(id).textContent = t; $(id).classList.toggle('error', err); };
 
-// ---- Log On
+// ---- Log On: Circuit ID / Project ID / Fault ID (at least one)
 
-let logOnAsset = null, beforePhotos = null;
+let logOnAsset = null;
+const jobIds = () => ({ circuit: $('in-circuit').value.trim(), project: $('in-project').value.trim(), fault: $('in-fault').value.trim() });
 
 function openLogOn(a) {
   if (!navigator.onLine) { toast('You need a connection to Log On.'); return; }
   const chk = logOnCheck(a);
   if (!chk.ok) { toast(chk.why, 4000); return; }
   logOnAsset = a;
-  $('logon-title').textContent = C.logOnTitle || 'Inspect the joint';
   $('logon-asset').textContent = a.name || a.asset_id;
-  $('issue-yes').checked = false;
-  $('issue-no').checked = false;
-  $('issue-comment').value = '';
-  beforePhotos.reset();
+  ['in-circuit', 'in-project', 'in-fault'].forEach((id) => { $(id).value = ''; });
   $('logon-msg').textContent = '';
   updateLogOnForm();
   $('dlg-logon').showModal();
 }
 
 function updateLogOnForm() {
-  const yes = $('issue-yes').checked, no = $('issue-no').checked;
-  $('issue-details').hidden = !yes;
-  const ok = no || (yes && $('issue-comment').value.trim() && beforePhotos.list.length > 0);
+  const ids = jobIds();
+  const ok = !!(ids.circuit || ids.project || ids.fault);
   $('btn-logon-submit').disabled = !ok;
-  $('logon-hint').textContent = yes && !ok ? 'Add a comment and at least one photo to submit.' : '';
+  $('logon-hint').textContent = ok ? '' : 'Enter a Circuit ID, Project ID or Fault ID to log on.';
 }
 
 async function submitLogOn(e) {
   e.preventDefault();
   const a = logOnAsset;
-  const yes = $('issue-yes').checked;
-  const msg = (t, err = false) => { $('logon-msg').textContent = t; $('logon-msg').classList.toggle('error', err); };
-  const btn = $('btn-logon-submit');
-  btn.disabled = true;
+  const msg = formMsg('logon-msg');
+  $('btn-logon-submit').disabled = true;
   try {
-    // Re-check distance with a fresh GPS position before uploading anything
-    msg('Checking your location…');
-    try { onFix(await getFreshFix()); } catch { /* use the last known position */ }
-    if (!S.fix || Date.now() - S.fix.time.getTime() > 120000) throw new Error('Could not get your current location. Check location is allowed and try again.');
+    const fix = await currentFix(msg);
     const chk = logOnCheck(a);
     if (!chk.ok) throw new Error(chk.why);
+    const ids = jobIds();
     const workId = newId();
-    const photos = yes ? await uploadPhotos(beforePhotos.list, workId, a, 'before', msg) : [];
     msg('Saving…');
     const res = await S.api.logOn({
       workId, layer: a.layer, assetId: a.asset_id, assetName: a.name, lat: a.lat, lon: a.lon,
-      issue: yes ? 'Yes' : 'No', issueComments: yes ? $('issue-comment').value.trim() : null, photos,
-      userLat: S.fix.lat, userLon: S.fix.lon, userAccuracy: S.fix.accuracy,
+      circuitId: ids.circuit || null, projectId: ids.project || null, faultId: ids.fault || null,
+      userLat: fix.lat, userLon: fix.lon, userAccuracy: fix.accuracy,
     });
     const job = { asset_layer: a.layer, asset_id: a.asset_id, work_id: workId, status: 'Open', is_mine: true,
       field_worker_name: res?.field_worker_name, work_started_at: res?.work_started_at || new Date().toISOString() };
@@ -931,40 +974,38 @@ async function submitLogOn(e) {
   }
 }
 
-// ---- Log Off
+// ---- Log Off: a comment describing the work is required
 
-let logOffAsset = null, afterPhotos = null;
+let logOffAsset = null;
 
 function openLogOff(a) {
   if (!navigator.onLine) { toast('You need a connection to Log Off.'); return; }
   logOffAsset = a;
   $('logoff-asset').textContent = a.name || a.asset_id;
   $('work-comment').value = '';
-  afterPhotos.reset();
   $('logoff-msg').textContent = '';
   updateLogOffForm();
   $('dlg-logoff').showModal();
 }
 
 function updateLogOffForm() {
-  const ok = $('work-comment').value.trim() && afterPhotos.list.length > 0;
+  const ok = !!$('work-comment').value.trim();
   $('btn-logoff-submit').disabled = !ok;
-  $('logoff-hint').textContent = ok ? '' : 'Add at least one photo and a comment to submit.';
+  $('logoff-hint').textContent = ok ? '' : 'Enter a comment describing the work to log off.';
 }
 
 async function submitLogOff(e) {
   e.preventDefault();
   const a = logOffAsset;
   const job = S.work[assetKey(a)] || S.myOpen.find((j) => j.asset_layer === a.layer && j.asset_id === a.asset_id);
-  const msg = (t, err = false) => { $('logoff-msg').textContent = t; $('logoff-msg').classList.toggle('error', err); };
+  const msg = formMsg('logoff-msg');
   if (!job?.work_id) { msg('Could not find the open job for this asset. Refresh and try again.', true); return; }
-  const btn = $('btn-logoff-submit');
-  btn.disabled = true;
+  $('btn-logoff-submit').disabled = true;
   try {
-    const photos = await uploadPhotos(afterPhotos.list, job.work_id, a, 'after', msg);
     msg('Saving…');
-    const res = await S.api.logOff({ workId: job.work_id, comments: $('work-comment').value.trim(), photos });
-    S.work[assetKey(a)] = { ...job, status: 'Closed', is_mine: true, work_completed_at: res?.work_completed_at || new Date().toISOString() };
+    const res = await S.api.logOff({ workId: job.work_id, comments: $('work-comment').value.trim() });
+    S.work[assetKey(a)] = { ...job, status: 'Closed', is_mine: true, closed_by_name: res?.closed_by_name,
+      work_completed_at: res?.work_completed_at || new Date().toISOString() };
     S.myOpen = S.myOpen.filter((j) => j.work_id !== job.work_id);
     $('dlg-logoff').close();
     renderActiveJobs();
@@ -978,18 +1019,68 @@ async function submitLogOff(e) {
   }
 }
 
+// ---- Log Incident: fault or network issue, with optional photos
+
+let incidentPhotos = null;
+const INCIDENT_TYPES = Array.isArray(C.incidentTypes) && C.incidentTypes.length ? C.incidentTypes
+  : ['Fault', 'Network issue', 'Damaged asset', 'Safety hazard', 'Other'];
+
+function openIncident() {
+  if (!navigator.onLine) { toast('You need a connection to log an incident.'); return; }
+  $('in-incident-type').value = '';
+  $('in-incident-comment').value = '';
+  incidentPhotos.reset();
+  $('incident-msg').textContent = '';
+  $('incident-location').textContent = S.fix
+    ? `Your location (±${Math.round(S.fix.accuracy)} m) will be recorded with the report.`
+    : 'Your location will be recorded with the report.';
+  updateIncidentForm();
+  $('dlg-incident').showModal();
+}
+
+function updateIncidentForm() {
+  const ok = !!($('in-incident-type').value && $('in-incident-comment').value.trim() && incidentPhotos.list.length);
+  $('btn-incident-submit').disabled = !ok;
+  $('incident-hint').textContent = ok ? '' : 'Choose a type, describe the incident and take at least one photo to submit.';
+}
+
+async function submitIncident(e) {
+  e.preventDefault();
+  const msg = formMsg('incident-msg');
+  $('btn-incident-submit').disabled = true;
+  try {
+    const fix = await currentFix(msg);
+    const id = newId();
+    const type = $('in-incident-type').value;
+    const photos = await uploadPhotos(incidentPhotos.list, id, `Incident_${type}`, msg);
+    msg('Saving…');
+    await S.api.logIncident({ id, type, comments: $('in-incident-comment').value.trim(),
+      lat: fix.lat, lon: fix.lon, accuracy: fix.accuracy, photos });
+    $('dlg-incident').close();
+    toast('Incident reported. Thank you.', 4000);
+  } catch (err) {
+    console.error(err);
+    msg(friendlyError(err), true);
+    updateIncidentForm();
+  }
+}
+
 function wireWorkForms() {
-  beforePhotos = photoPicker('btn-before-photo', 'in-before-photo', 'before-thumbs', updateLogOnForm);
-  afterPhotos = photoPicker('btn-after-photo', 'in-after-photo', 'after-thumbs', updateLogOffForm);
-  // Yes / No behave as a pair: ticking one clears the other
-  $('issue-yes').addEventListener('change', () => { if ($('issue-yes').checked) $('issue-no').checked = false; updateLogOnForm(); });
-  $('issue-no').addEventListener('change', () => { if ($('issue-no').checked) $('issue-yes').checked = false; updateLogOnForm(); });
-  $('issue-comment').addEventListener('input', updateLogOnForm);
+  ['in-circuit', 'in-project', 'in-fault'].forEach((id) => $(id).addEventListener('input', updateLogOnForm));
   $('work-comment').addEventListener('input', updateLogOffForm);
   $('form-logon').addEventListener('submit', submitLogOn);
   $('form-logoff').addEventListener('submit', submitLogOff);
   $('btn-logon-cancel').addEventListener('click', () => $('dlg-logon').close());
   $('btn-logoff-cancel').addEventListener('click', () => $('dlg-logoff').close());
+
+  const sel = $('in-incident-type');
+  INCIDENT_TYPES.forEach((t) => sel.append(el('option', { value: t }, t)));
+  incidentPhotos = photoPicker('btn-incident-photo', 'in-incident-photo', 'incident-thumbs', updateIncidentForm);
+  sel.addEventListener('change', updateIncidentForm);
+  $('in-incident-comment').addEventListener('input', updateIncidentForm);
+  $('form-incident').addEventListener('submit', submitIncident);
+  $('btn-incident-cancel').addEventListener('click', () => $('dlg-incident').close());
+  $('btn-incident').addEventListener('click', openIncident);
 }
 
 // ---------------------------------------------------------------------------
@@ -999,16 +1090,8 @@ function wireWorkForms() {
 function updateStatus() {
   $('offline-pill').hidden = navigator.onLine;
 
-  const t = $('position-text');
-  if (S.fix) {
-    const poor = S.fix.accuracy > C.maxAccuracyM;
-    t.innerHTML = '';
-    t.append(
-      el('strong', {}, `${S.fix.lat.toFixed(5)}, ${S.fix.lon.toFixed(5)}`),
-      ` · ±${Math.round(S.fix.accuracy)} m · ${fmtTime(S.fix.time)}`,
-    );
-    if (poor) t.append(el('span', { class: 'status-tag' }, ' · weak GPS'));
-  }
+  // Coordinates aren't shown; this line only appears for location problems
+  if (S.fix) $('position-text').hidden = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,8 +1113,8 @@ async function init() {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW failed', e));
   }
 
-  // Keep the radius to one of the Settings options (snaps old saved values to the nearest)
-  const radiusOptions = [...$('set-radius').options].map((o) => Number(o.value));
+  // Keep the radius to one of the distance options (snaps old saved values to the nearest)
+  const radiusOptions = [...$('sel-distance').options].map((o) => Number(o.value));
   if (!radiusOptions.includes(S.radius)) {
     S.radius = radiusOptions.reduce((a, b) => (Math.abs(b - S.radius) < Math.abs(a - S.radius) ? b : a));
     store.set('radius', S.radius);
@@ -1040,18 +1123,18 @@ async function init() {
   wireLogin();
   wireChangePassword();
   wireWorkForms();
-  $('btn-refresh').addEventListener('click', findNearMe);
-  $('tab-list').addEventListener('click', () => selectTab('list'));
-  $('tab-map').addEventListener('click', () => selectTab('map'));
-  $('btn-menu').addEventListener('click', () => {
-    $('set-radius').value = String(S.radius);
-    $('sheet-settings').showModal();
-  });
-  $('set-radius').addEventListener('change', (e) => {
+  // Distance dropdown: choosing a distance searches around the current position
+  const showDistance = () => { $('sel-distance').value = String(S.radius); };   // chosen distance is ticked in the list
+  showDistance();
+  $('sel-distance').addEventListener('change', (e) => {
     S.radius = Number(e.target.value);
     store.set('radius', S.radius);
-    maybeQuery(true);
+    showDistance();
+    findNearMe();
   });
+  $('tab-list').addEventListener('click', () => selectTab('list'));
+  $('tab-map').addEventListener('click', () => selectTab('map'));
+  $('btn-menu').addEventListener('click', () => $('sheet-settings').showModal());
   $('btn-signout').addEventListener('click', signOut);
   $('btn-denied-signout').addEventListener('click', signOut);
 
