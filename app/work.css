@@ -3,13 +3,13 @@
 :root {
   --open: #d92d20;          /* open job: red */
   --open-bg: #fde8e7;
-  --closed: #f59e0b;        /* recently closed (7 days): amber */
-  --closed-ink: #7a4100;
-  --closed-bg: #fff3d6;
+  --closed: #e8590c;        /* recently closed (7 days): dark orange */
+  --closed-ink: #c2410c;
+  --closed-bg: #ffedd5;
   --idle: #2563eb;          /* no recent job: blue */
 }
 @media (prefers-color-scheme: dark) {
-  :root { --open: #f04438; --open-bg: #3b1412; --closed: #fbbf24; --closed-ink: #fcd34d; --closed-bg: #3a2a0a; --idle: #4f8cff; }
+  :root { --open: #f04438; --open-bg: #3b1412; --closed: #fb7a2c; --closed-ink: #fd9a5a; --closed-bg: #3a1d0a; --idle: #4f8cff; }
 }
 
 /* ---- status tags (list, popup, banner) ---- */
@@ -19,7 +19,7 @@
   vertical-align: middle;
 }
 .work-tag.open   { background: var(--open);   color: #fff; }
-.work-tag.closed { background: var(--closed); color: #3b2300; }
+.work-tag.closed { background: var(--closed); color: #fff; }
 
 /* ---- map markers ---- */
 .asset-marker {
@@ -65,7 +65,8 @@
 .asset-work.open   { color: var(--open); }
 .asset-work.closed { color: var(--closed-ink); }
 .asset-work-actions { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
-.asset-work-actions .btn { min-height: 48px; }
+.asset-work-actions .btn { min-height: 52px; font-size: 1.05rem; }
+.asset-work-actions .btn.showmap-btn { min-height: 42px; font-size: .92rem; margin-top: 4px; }  /* smaller than Log On */
 
 /* ---- Log Incident button ---- */
 .incident-btn { background: transparent; color: var(--open); border-color: var(--open); }

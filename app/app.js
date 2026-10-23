@@ -602,13 +602,9 @@ function renderList() {
       const rows = [['Asset ID', a.asset_id], ['Layer', a.layer], ['Type', a.asset_type], ['Status', a.status],
         ...Object.entries(a.attributes || {})];
       const dl = el('dl', {}, rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, fmtValue(v))]));
-      const dest = `${a.lat},${a.lon}`;
       li.append(el('div', { class: 'asset-body' }, dl,
-        el('div', { class: 'asset-work-actions' }, ...workButton(a)),
-        el('div', { class: 'asset-actions' },
-          el('button', { class: 'btn primary', onclick: () => showOnMap(a) }, 'Show on map'),
-          el('a', { class: 'btn', href: `https://www.google.com/maps/dir/?api=1&destination=${dest}`, target: '_blank', rel: 'noopener' }, 'Directions'),
-          el('button', { class: 'btn', onclick: () => copy(a.asset_id) }, 'Copy ID'))));
+        el('div', { class: 'asset-work-actions' }, ...workButton(a),
+          el('button', { class: 'btn showmap-btn', onclick: () => showOnMap(a) }, 'Show on map'))));
     }
     list.append(li);
   }
