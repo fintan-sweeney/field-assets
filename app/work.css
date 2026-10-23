@@ -8,8 +8,25 @@
   --closed-bg: #ffedd5;
   --idle: #2563eb;          /* no recent job: blue */
 }
+/* Always use the light theme, even when the phone is set to dark mode */
+:root { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
-  :root { --open: #f04438; --open-bg: #3b1412; --closed: #fb7a2c; --closed-ink: #fd9a5a; --closed-bg: #3a1d0a; --idle: #4f8cff; }
+  :root {
+    --bg: #f3f5f4;
+    --surface: #ffffff;
+    --surface-2: #e8eceb;
+    --text: #0e1a1b;
+    --muted: #55605f;
+    --border: #cfd6d4;
+    --brand: #0f3d3e;
+    --ok: #1d7a46;
+    --ok-bg: #dcf2e4;
+    --warn: #8a4b00;
+    --warn-bg: #ffe9cc;
+    --danger: #b42318;
+    color-scheme: light;
+  }
+  .btn.link { color: var(--brand); }
 }
 
 /* ---- status tags (list, popup, banner) ---- */
@@ -82,7 +99,8 @@
   opacity: 0; cursor: pointer; font-size: 16px;   /* invisible, but opens the phone's picker */
   border: 0; appearance: none; -webkit-appearance: none;
 }
-.distance-btn:focus-within { outline: 3px solid var(--accent, #f2711c); outline-offset: 2px; }
+.distance-btn, .distance-btn select { outline: none; -webkit-tap-highlight-color: transparent; }
+.distance-btn select:focus { outline: none; }
 
 /* ---- "you're logged on" banner ---- */
 .active-jobs { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
