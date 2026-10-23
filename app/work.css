@@ -198,3 +198,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
 .map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 14px; height: 14px; margin: 0; }
 .map-legend .legend-open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
 .map-legend .legend-you { border-width: 2px; box-shadow: 0 0 0 2px rgba(26, 115, 232, .4); }
+
+/* ---- Log On page: heading, asset, question and field labels centred ---- */
+#form-logon, #form-logon input { text-align: center; }   /* everything on the Log On page centred, including typed IDs */
+#form-logon .work-asset { margin: 2px 0 6px; font-size: 1.35rem; font-weight: 800; color: var(--text); }   /* asset name is the heading */
