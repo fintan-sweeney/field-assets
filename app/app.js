@@ -674,7 +674,7 @@ function renderMapAssets() {
     const m = L.marker([a.lat, a.lon], {
       icon: L.divIcon({ className: '', html, iconSize: [18, 18], iconAnchor: [9, 9] }),
       zIndexOffset: st === 'open' ? 1000 : 0,
-    }).bindPopup(() => buildPopup(a), { minWidth: 150, maxWidth: 210, autoPanPadding: [20, 20] }).addTo(g);
+    }).bindPopup(() => buildPopup(a), { minWidth: 170, maxWidth: 240, autoPanPadding: [20, 20] }).addTo(g);
     m.on('popupopen', () => { S.popup = { a, m, why: logOnCheck(a).why || '' }; });
     m.on('popupclose', () => { if (S.popup?.m === m) S.popup = null; });
     S.markers[key] = m;
