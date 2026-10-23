@@ -1137,6 +1137,14 @@ async function init() {
   $('tab-list').addEventListener('click', () => selectTab('list'));
   $('tab-map').addEventListener('click', () => selectTab('map'));
   $('btn-menu').addEventListener('click', () => $('sheet-settings').showModal());
+  // Map key: open with the button, close with ×
+  const setLegend = (open) => {
+    $('map-legend').hidden = !open;
+    $('btn-legend').hidden = open;
+    $('btn-legend').setAttribute('aria-expanded', String(open));
+  };
+  $('btn-legend').addEventListener('click', () => setLegend(true));
+  $('btn-legend-close').addEventListener('click', () => setLegend(false));
   $('btn-signout').addEventListener('click', signOut);
   $('btn-denied-signout').addEventListener('click', signOut);
 

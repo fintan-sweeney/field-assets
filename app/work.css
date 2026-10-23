@@ -169,16 +169,32 @@ textarea:focus { outline: none; border-color: var(--brand); }
 /* ---- list item title: the asset name is the main label ---- */
 .asset-head .asset-name { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
 
-/* ---- map key (legend), bottom-left of the map ---- */
+/* ---- map key (legend): button bottom-left, opens a small panel with a × to close ---- */
 .map-panel { position: relative; }
-.map-legend {
+.legend-toggle, .map-legend {
   position: absolute; left: 26px; bottom: calc(env(safe-area-inset-bottom) + 26px); z-index: 450;
-  display: flex; flex-direction: column; gap: 5px;
-  padding: 8px 10px; border-radius: 10px;
-  background: rgba(255, 255, 255, .94); box-shadow: 0 1px 6px rgba(0, 0, 0, .25);
-  font-size: .8rem; font-weight: 700; color: #0e1a1b; pointer-events: none;
 }
+.legend-toggle {
+  width: 44px; height: 44px; border-radius: 50%; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid rgba(0, 0, 0, .12); box-shadow: 0 1px 6px rgba(0, 0, 0, .3);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.legend-toggle[hidden] { display: none; }
+.map-legend {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px 10px 12px; border-radius: 12px;
+  background: #fff; box-shadow: 0 1px 8px rgba(0, 0, 0, .3);
+  font-size: .82rem; font-weight: 700; color: #0e1a1b;
+}
+.map-legend[hidden] { display: none; }
 .map-legend > div { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.map-legend .legend-head { justify-content: space-between; gap: 18px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: #55605f; }
+.legend-close {
+  width: 30px; height: 30px; margin: -4px -6px -4px 0; border: 0; border-radius: 50%;
+  background: transparent; color: #0e1a1b; font-size: 22px; line-height: 1; cursor: pointer;
+}
+.legend-close:active { background: #e8eceb; }
 .map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 14px; height: 14px; margin: 0; }
 .map-legend .legend-open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
-.map-legend .legend-you { border-width: 2px; }
+.map-legend .legend-you { border-width: 2px; box-shadow: 0 0 0 2px rgba(26, 115, 232, .4); }
