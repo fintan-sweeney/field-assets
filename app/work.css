@@ -162,3 +162,6 @@ textarea:focus { outline: none; border-color: var(--brand); }
 
 /* ---- list summary ("12 assets within 100 m · updated …") ---- */
 .list-summary { text-align: center; }
+
+/* ---- list item title: the asset name is the main label ---- */
+.asset-head .asset-name { font-size: 1.25rem; font-weight: 800; line-height: 1.2; }
