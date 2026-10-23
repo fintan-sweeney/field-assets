@@ -832,14 +832,10 @@ function workButton(a, compact = false) {
   ];
 }
 
-// Small, tidy popup for the map
+// Small, tidy popup for the map: just the asset name (centred) and the Log On / Log Off button
 function buildPopup(a) {
-  const w = S.work[assetKey(a)];
-  const { d } = liveDistance(a);
   return el('div', { class: 'popup' },
-    el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id), workTag(w)),
-    el('div', { class: 'popup-sub' },
-      w ? workLine(w) : [a.name && a.name !== a.asset_id ? a.asset_id : (a.asset_type || a.layer), d != null ? ` · ${fmtDist(d)}` : '']),
+    el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id)),
     ...workButton(a, true));
 }
 
