@@ -669,7 +669,7 @@ function renderMapAssets() {
     if (a.lat == null) continue;
     const key = assetKey(a);
     const st = (S.work[key]?.status || '').toLowerCase();
-    const html = st === 'open' ? '<div class="asset-marker open"><span>OPEN</span></div>'
+    const html = st === 'open' ? '<div class="asset-marker open"></div>'
       : st === 'closed' ? '<div class="asset-marker closed"></div>' : '<div class="asset-marker"></div>';
     const m = L.marker([a.lat, a.lon], {
       icon: L.divIcon({ className: '', html, iconSize: [18, 18], iconAnchor: [9, 9] }),
@@ -784,8 +784,10 @@ function renderActiveJobs() {
       || { layer: j.asset_layer, asset_id: j.asset_id, name: j.asset_name, lat: j.asset_lat, lon: j.asset_lon, asset_type: j.asset_layer };
     box.append(el('div', { class: 'active-job' },
       el('span', { class: 'work-tag open' }, 'OPEN'),
-      el('span', { class: 'active-job-text' }, `You're logged on to `, el('strong', {}, j.asset_name || j.asset_id),
-        ` since ${fmtTime(new Date(j.work_started_at))}`),
+      el('div', { class: 'active-job-text' },
+        el('div', {}, `You're logged on to:`),
+        el('strong', { class: 'active-job-asset' }, j.asset_name || j.asset_id),
+        el('div', {}, `since ${fmtWhen(j.work_started_at)}`)),
       a.lat != null ? el('button', { class: 'btn small', onclick: () => {
         S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
         showOnMap(a);
