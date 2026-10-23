@@ -1,21 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 9 72 52" role="img" aria-label="FibreconX">
-  <defs>
-    <!-- crescent: outer circle minus inner circle, open on the left -->
-    <mask id="fx-crescent" maskUnits="userSpaceOnUse" x="0" y="0" width="80" height="70">
-      <circle cx="51" cy="34.75" r="25" fill="#fff"/>
-      <circle cx="51" cy="34.75" r="18" fill="#000"/>
-      <rect x="0" y="16.75" width="51" height="36" fill="#000"/>
-    </mask>
-    <mask id="fx-hole" maskUnits="userSpaceOnUse" x="0" y="0" width="80" height="70">
-      <rect x="0" y="0" width="80" height="70" fill="#fff"/>
-      <circle cx="51" cy="34.75" r="7.2" fill="#000"/>
-    </mask>
-  </defs>
-  <rect x="0" y="0" width="80" height="70" fill="#fdfefe" mask="url(#fx-crescent)"/>
-  <g fill="#c2e7ea" mask="url(#fx-hole)">
-    <circle cx="51" cy="34.75" r="14"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 9 72 52" role="img" aria-label="FibreconX" shape-rendering="geometricPrecision">
+  <!-- outer crescent (plain path, no masks, so it stays sharp on every phone) -->
+  <path fill="#fdfefe" d="M 33.651 16.75 A 25 25 0 1 1 33.651 52.75 L 51 52.75 A 18 18 0 0 0 51 16.75 Z"/>
+  <!-- inner ring with hole (even-odd fill) and three speed lines -->
+  <g fill="#c2e7ea">
+    <path fill-rule="evenodd" d="M 37 34.75 A 14 14 0 1 1 65 34.75 A 14 14 0 1 1 37 34.75 Z M 43.8 34.75 A 7.2 7.2 0 1 0 58.2 34.75 A 7.2 7.2 0 1 0 43.8 34.75 Z"/>
     <rect x="21" y="20.75" width="30" height="4"/>
-    <rect x="6"  y="32.75" width="45" height="4"/>
+    <rect x="6"  y="32.75" width="37.8" height="4"/>
     <rect x="21" y="44.75" width="30" height="4"/>
   </g>
 </svg>
