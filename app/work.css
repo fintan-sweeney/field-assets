@@ -3,7 +3,7 @@
 :root {
   --open: #d92d20;          /* open job: red */
   --open-bg: #fde8e7;
-  --closed: #e8590c;        /* recently closed (7 days): dark orange */
+  --closed: #ff8c1a;        /* recently closed (7 days): bright orange */
   --closed-ink: #c2410c;
   --closed-bg: #ffedd5;
   --idle: #2563eb;          /* no recent job: blue */
@@ -78,7 +78,12 @@
 .btn.small { min-height: 34px; padding: 0 10px; font-size: .85rem; border-radius: 9px; }
 
 /* ---- list: who opened / closed ---- */
+.asset-status { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
+.asset-status .work-tag { margin-left: 0; font-size: .78rem; padding: 2px 10px; }
 .asset-work { grid-column: 1 / -1; font-size: .85rem; font-weight: 700; }
+.asset-work { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.asset-work-who { text-align: left; overflow-wrap: anywhere; }
+.asset-work-when { text-align: right; white-space: nowrap; }
 .asset-work.open   { color: var(--open); }
 .asset-work.closed { color: var(--closed-ink); }
 .asset-work-actions { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }

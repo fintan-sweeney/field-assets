@@ -592,9 +592,12 @@ function renderList() {
     const head = el('button', { class: 'asset-head', 'aria-expanded': String(open), onclick: () => {
       S.openAsset = open ? null : key; renderList();
     } },
-      el('span', { class: 'asset-name' }, a.name || a.asset_id, workTag(S.work[key])),
-      el('span', { class: 'asset-dist', 'data-key': key }, fmtDist(d), el('small', {}, dir || '')),
-      S.work[key] ? el('span', { class: `asset-work ${S.work[key].status === 'Open' ? 'open' : 'closed'}` }, workLine(S.work[key])) : null,
+      el('span', { class: 'asset-name' }, a.name || a.asset_id),
+      S.work[key] ? el('span', { class: 'asset-status' }, workTag(S.work[key])) : null,   // OPEN / CLOSED, top right
+      // List: "User" on the left, "@ time date" on the right (colour shows open/closed)
+      S.work[key] ? el('span', { class: `asset-work ${S.work[key].status === 'Open' ? 'open' : 'closed'}` },
+        el('span', { class: 'asset-work-who' }, workUser(S.work[key])),
+        el('span', { class: 'asset-work-when' }, `@ ${fmtWhen(S.work[key].status === 'Open' ? S.work[key].work_started_at : S.work[key].work_completed_at)}`)) : null,
     );
     const li = el('li', { class: 'asset' }, head);
 
@@ -736,12 +739,20 @@ function fmtWhen(iso) {
   return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-// "Opened by Bob @ 10:41 23/10/2026" / "Closed by Bob @ 15:05 22/10/2026"
-function workLine(w) {
-  if (!w) return '';
-  if (w.status === 'Open') return `Opened by ${w.is_mine ? 'you' : (w.field_worker_name || 'another user')} @ ${fmtWhen(w.work_started_at)}`;
-  return `Closed by ${w.is_mine && !w.closed_by_name ? 'you' : (w.closed_by_name || w.field_worker_name || 'another user')} @ ${fmtWhen(w.work_completed_at)}`;
+// ["Opened by Bob", "@ 10:41 23/10/2026"] / ["Closed by Bob", "@ 15:05 22/10/2026"]
+function workParts(w) {
+  if (!w) return ['', ''];
+  if (w.status === 'Open') return [`Opened by ${w.is_mine ? 'you' : (w.field_worker_name || 'another user')}`, `@ ${fmtWhen(w.work_started_at)}`];
+  return [`Closed by ${w.is_mine && !w.closed_by_name ? 'you' : (w.closed_by_name || w.field_worker_name || 'another user')}`, `@ ${fmtWhen(w.work_completed_at)}`];
 }
+// Name of the person who opened (or closed) the job
+function workUser(w) {
+  return w.status === 'Open'
+    ? (w.field_worker_name || (w.is_mine ? 'You' : 'Another user'))
+    : (w.closed_by_name || w.field_worker_name || (w.is_mine ? 'You' : 'Another user'));
+}
+// One line (map popup): "Closed by Bob @ 15:05 22/10/2026"
+const workLine = (w) => (w ? workParts(w).join(' ') : '');
 
 async function refreshWorkStatus() {
   if (!S.assets.length) return;
