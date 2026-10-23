@@ -200,7 +200,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
 .map-legend .legend-you { border-width: 2px; box-shadow: 0 0 0 2px rgba(26, 115, 232, .4); }
 
 /* ---- Log On page: heading, asset, question and field labels centred ---- */
-#form-logon, #form-logon input, #form-logoff { text-align: center; }   /* everything on the Log On page centred, including typed IDs */
+#form-logon .work-asset { text-align: center; }   /* Log On: heading (asset name) centred, everything else left-aligned */
 #form-logon .work-asset, #form-logoff .work-asset { margin: 2px 0 6px; font-size: 1.35rem; font-weight: 800; color: var(--text); }   /* asset name is the heading */
 
 /* ---- "you're logged on" banner: three centred lines (label / asset / since) ---- */
@@ -210,3 +210,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
 /* Log Off comment: a line space under the label; typing (and the hint) start at the left so the cursor sits where the hint begins */
 #form-logoff label[for="work-comment"] { margin-bottom: 10px; }
 #form-logoff textarea, #form-logoff textarea::placeholder { text-align: left; }
+/* Log Off: heading (asset name) centred, everything else left-aligned */
+#form-logoff .work-asset { text-align: center; }
+/* Log Incident: heading centred */
+#form-incident h2 { text-align: center; }
