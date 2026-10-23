@@ -84,8 +84,8 @@
 .asset-work { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .asset-work-who { text-align: left; overflow-wrap: anywhere; }
 .asset-work-when { text-align: right; white-space: nowrap; }
-.asset-work.open   { color: var(--open); }
-.asset-work.closed { color: var(--closed-ink); }
+.asset-work.open   { color: var(--open); }     /* same red as the OPEN tag */
+.asset-work.closed { color: var(--closed); }   /* same orange as the CLOSED tag */
 .asset-work-actions { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
 .asset-work-actions .btn { min-height: 52px; font-size: 1.05rem; }
 .asset-work-actions .btn.showmap-btn { min-height: 42px; font-size: .92rem; margin-top: 4px; }  /* smaller than Log On */
@@ -153,3 +153,6 @@ textarea:focus { outline: none; border-color: var(--brand); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .topbar #btn-menu { justify-self: end; }
+
+/* ---- list summary ("12 assets within 100 m · updated …") ---- */
+.list-summary { text-align: center; }
