@@ -728,20 +728,19 @@ function workTag(w) {
   return el('span', { class: `work-tag ${w.status === 'Open' ? 'open' : 'closed'}` }, w.status.toUpperCase());
 }
 
-// "10:41 am" for today, otherwise "22/10 10:41 am"
+// "15:05 23/10/2026" (24-hour time, then the date)
 function fmtWhen(iso) {
   if (!iso) return '';
   const d = new Date(iso);
-  const today = new Date().toDateString() === d.toDateString();
-  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return today ? t : `${d.toLocaleDateString([], { day: '2-digit', month: '2-digit' })} ${t}`;
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
 }
 
-// "Opened by Bob · 10:41 am" / "Closed by Bob · 22/10 3:05 pm"
+// "Opened by Bob @ 10:41 23/10/2026" / "Closed by Bob @ 15:05 22/10/2026"
 function workLine(w) {
   if (!w) return '';
-  if (w.status === 'Open') return `Opened by ${w.is_mine ? 'you' : (w.field_worker_name || 'another user')} · ${fmtWhen(w.work_started_at)}`;
-  return `Closed by ${w.is_mine && !w.closed_by_name ? 'you' : (w.closed_by_name || w.field_worker_name || 'another user')} · ${fmtWhen(w.work_completed_at)}`;
+  if (w.status === 'Open') return `Opened by ${w.is_mine ? 'you' : (w.field_worker_name || 'another user')} @ ${fmtWhen(w.work_started_at)}`;
+  return `Closed by ${w.is_mine && !w.closed_by_name ? 'you' : (w.closed_by_name || w.field_worker_name || 'another user')} @ ${fmtWhen(w.work_completed_at)}`;
 }
 
 async function refreshWorkStatus() {
