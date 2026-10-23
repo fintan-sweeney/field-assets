@@ -155,7 +155,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
 }
 .topbar-logo { justify-self: start; height: 32px; width: auto; display: block; }
 .topbar-title {
-  text-align: center; font-weight: 700; font-size: 1.15rem; letter-spacing: .01em;
+  text-align: center; font-weight: 800; font-size: clamp(1.1rem, 5.6vw, 1.35rem); letter-spacing: .01em;   /* bigger, but still fits small phones */
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .topbar #btn-menu { justify-self: end; }
