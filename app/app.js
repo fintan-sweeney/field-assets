@@ -594,9 +594,9 @@ function renderList() {
     } },
       el('span', { class: 'asset-name' }, a.name || a.asset_id),
       S.work[key] ? el('span', { class: 'asset-status' }, workTag(S.work[key])) : null,   // OPEN / CLOSED, top right
-      // List: "User" on the left, "@ time date" on the right (colour shows open/closed)
+      // List: "By User" on the left, "@ time date" on the right (colour shows open/closed)
       S.work[key] ? el('span', { class: `asset-work ${S.work[key].status === 'Open' ? 'open' : 'closed'}` },
-        el('span', { class: 'asset-work-who' }, workUser(S.work[key])),
+        el('span', { class: 'asset-work-who' }, `By ${workUser(S.work[key])}`),
         el('span', { class: 'asset-work-when' }, `@ ${fmtWhen(S.work[key].status === 'Open' ? S.work[key].work_started_at : S.work[key].work_completed_at)}`)) : null,
     );
     const li = el('li', { class: 'asset' }, head);
