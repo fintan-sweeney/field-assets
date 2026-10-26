@@ -904,16 +904,17 @@ function renderActiveJobs() {
       el('div', { class: 'active-job-text' },
         el('div', {}, `You're logged on to:`),
         el('strong', { class: 'active-job-asset' }, j.asset_name || j.asset_id),
-        el('div', {}, `since ${fmtWhen(j.work_started_at)}`),
-        away ? el('div', { class: 'overdue-note' }, `You've moved away - please Log Off`)
-          : late ? el('div', { class: 'overdue-note' }, `Over ${SETTINGS.logon_overdue_hours || 4} hours - please Log Off`) : null),
+        el('div', {}, `since ${fmtWhen(j.work_started_at)}`)),
       el('div', { class: 'active-job-btns' },
         // Log Off works from anywhere, even when the asset is no longer in the list or on the map
         el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off'),
         a.lat != null ? el('button', { class: 'btn small', onclick: () => {
           S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
           showOnMap(a);
-        } }, 'Show') : null)));
+        } }, 'Show') : null),
+      // Reminder across the full width of the banner, on one line
+      away ? el('div', { class: 'overdue-note' }, `You've moved away - please Log Off`)
+        : late ? el('div', { class: 'overdue-note' }, `Over ${SETTINGS.logon_overdue_hours || 4} hours - please Log Off`) : null));
   }
 }
 

@@ -220,7 +220,8 @@ textarea:focus { outline: none; border-color: var(--brand); }
 .overdue-title { margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--open); }
 .overdue-text { margin: 0 0 6px; line-height: 1.4; }
 .active-job.overdue { border-width: 2px; }
-.overdue-note { margin-top: 2px; font-size: .85rem; font-weight: 800; color: var(--open); }
+.active-job.overdue { flex-wrap: wrap; }
+.overdue-note { flex: 1 0 100%; margin-top: 2px; text-align: center; white-space: nowrap; font-size: .85rem; font-weight: 800; color: var(--open); }
 
 /* ---- map popup when logged on: Log Off (main) + warning button that opens Log Joint Incident ---- */
 .popup-actions { display: flex; align-items: center; gap: 8px; }
