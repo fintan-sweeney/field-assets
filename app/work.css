@@ -239,3 +239,6 @@ textarea:focus { outline: none; border-color: var(--brand); }
 /* ---- logged-on banner: Log Off (works from anywhere) above Show ---- */
 .active-job-btns { display: flex; flex-direction: column; gap: 6px; flex: none; }
 .active-job-btns .btn { min-width: 76px; }
+
+/* ---- pop-up messages (e.g. "we'll remind you again in 30 minutes"): centred text ---- */
+.toast { text-align: center; }

@@ -816,7 +816,7 @@ const jobAsset = (j) => S.assets.find((x) => x.layer === j.asset_layer && x.asse
 const overdueMs = () => (Number(SETTINGS.logon_overdue_hours) || 4) * 3600000;
 const awayLimit = () => Number(SETTINGS.logoff_prompt_distance_m) || 30;
 const isOverdue = (j) => Date.now() - new Date(j.work_started_at).getTime() >= overdueMs();
-const SNOOZE_MS = { time: 60 * 60000, away: 30 * 60000 };   // "Still working": time 1 hour, moved away 30 min
+const SNOOZE_MS = { time: 30 * 60000, away: 30 * 60000 };   // "Still working": remind again in 30 minutes
 const fmtLength = (ms) => {
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
   return `${h} hour${h === 1 ? '' : 's'}${m % 60 ? ` ${m % 60} min` : ''}`;
@@ -885,7 +885,7 @@ function wireOverdue() {
       store.set('overdue_snooze', snooze);
     }
     $('dlg-overdue').close();
-    toast(`OK - we'll remind you again in ${reminder?.reason === 'away' ? '30 minutes' : 'an hour'}.`);
+    toast("OK - we'll remind you again in 30 minutes.");
     checkOverdue();   // the other reminder may still be due
   });
 }
