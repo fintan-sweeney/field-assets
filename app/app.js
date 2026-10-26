@@ -147,6 +147,13 @@ async function supabaseBackend() {
       if (error) throw error;
       return data;
     },
+    async logJointIncident(p) {
+      const { data, error } = await sb.rpc('log_joint_incident', {
+        p_work_id: p.workId, p_comments: p.comments, p_photos: p.photos,
+      });
+      if (error) throw error;
+      return data;
+    },
     async logIncident(p) {
       const { data, error } = await sb.rpc('log_incident', {
         p_id: p.id, p_type: p.type, p_comments: p.comments,
@@ -240,7 +247,19 @@ function demoBackend() {
       return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open')
         .map((j) => ({ ...j, work_id: j.work_id }));
     },
-    async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 7 }; },
+    async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 7, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 }; },
+    async logJointIncident(p) {
+      await new Promise((r) => setTimeout(r, 200));
+      const jobs = store.get('demo_jobs', {});
+      const job = Object.values(jobs).find((j) => j.work_id === p.workId);
+      if (!job || job.status !== 'Open') throw new Error('This job is closed. Log On again to report an incident on it.');
+      if (!p.comments || !p.photos.length) throw new Error('Describe the incident and add a photo');
+      job.asset_integrity_issue = 'Yes';
+      job.integrity_issue_comments = [job.integrity_issue_comments, `${fmtWhen(new Date().toISOString())} - ${p.comments}`].filter(Boolean).join('\n');
+      store.set('demo_jobs', jobs);
+      console.info('[demo] joint incident', JSON.stringify({ work: p.workId, comments: p.comments, photos: p.photos.length }));
+      return { work_id: p.workId, asset_integrity_issue: 'Yes' };
+    },
     async logIncident(p) {
       await new Promise((r) => setTimeout(r, 200));
       if (!p.type || !p.comments || !p.photos.length) throw new Error('Choose a type, describe the incident and add a photo');
@@ -278,7 +297,7 @@ const S = {
 const APP_NAME = (!C.appName || C.appName === 'Field Assets') ? 'FibreconX Field App' : C.appName;
 const CLOSED_DAYS = Number.isFinite(C.showClosedForDays) ? C.showClosedForDays : 7;
 // Log On distance etc. come from the database (app_settings in 06_work_logs.sql); these are fallbacks
-const SETTINGS = { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: CLOSED_DAYS };
+const SETTINGS = { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: CLOSED_DAYS, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 };
 const assetKey = (a) => `${a.layer}|${a.asset_id}`;
 
 // ---------------------------------------------------------------------------
@@ -503,6 +522,7 @@ function onFix(pos) {
   maybeQuery();
   updateDistances();
   updateMapUser();
+  checkAway();
   // If a popup is open and the person has moved into (or out of) Log On range, refresh it
   if (S.popup) {
     const why = logOnCheck(S.popup.a).why || '';
@@ -765,6 +785,16 @@ async function refreshWorkStatus() {
   }
 }
 
+// Keep OPEN / CLOSED up to date without a new search, so a colleague's Log On
+// shows up within a minute. Only redraws when something has actually changed.
+async function pollWorkStatus() {
+  if (!S.api || !S.assets.length || S.querying || !navigator.onLine || document.visibilityState !== 'visible') return;
+  const before = JSON.stringify(S.work);
+  await refreshWorkStatus();
+  if (JSON.stringify(S.work) !== before) { renderList(); renderMapAssets(); }
+  loadMyOpenWork();
+}
+
 async function loadSettings() {
   try { Object.assign(SETTINGS, await S.api.settings() || {}); } catch (e) { console.warn('Using default settings', e); }
 }
@@ -772,6 +802,92 @@ async function loadSettings() {
 async function loadMyOpenWork() {
   try { S.myOpen = await S.api.myOpenWork(); } catch (e) { console.warn(e); }
   renderActiveJobs();
+  checkOverdue();
+}
+
+// The asset for one of my open jobs (from the current list, or rebuilt from the job)
+const jobAsset = (j) => S.assets.find((x) => x.layer === j.asset_layer && x.asset_id === j.asset_id)
+  || { layer: j.asset_layer, asset_id: j.asset_id, name: j.asset_name, lat: j.asset_lat, lon: j.asset_lon, asset_type: j.asset_layer };
+
+// ---- Log Off reminders (only while the app is open):
+//   * logged on longer than SETTINGS.logon_overdue_hours
+//   * moved more than SETTINGS.logoff_prompt_distance_m away from the asset
+
+const overdueMs = () => (Number(SETTINGS.logon_overdue_hours) || 4) * 3600000;
+const awayLimit = () => Number(SETTINGS.logoff_prompt_distance_m) || 30;
+const isOverdue = (j) => Date.now() - new Date(j.work_started_at).getTime() >= overdueMs();
+const SNOOZE_MS = { time: 60 * 60000, away: 30 * 60000 };   // "Still working": time 1 hour, moved away 30 min
+const fmtLength = (ms) => {
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+  return `${h} hour${h === 1 ? '' : 's'}${m % 60 ? ` ${m % 60} min` : ''}`;
+};
+
+// How far I am from the job's asset, or null if the GPS isn't good enough to say
+function awayDistance(j) {
+  const f = S.fix;
+  if (!f || j.asset_lat == null || j.asset_lon == null) return null;
+  if (f.accuracy > 50 || Date.now() - f.time.getTime() > 2 * 60000) return null;   // poor or stale GPS: don't nag
+  return haversine(f.lat, f.lon, j.asset_lat, j.asset_lon);
+}
+const isAway = (j) => { const d = awayDistance(j); return d !== null && d > awayLimit(); };
+
+let reminder = null;   // { job, reason }
+
+function checkOverdue() {
+  if (!S.myOpen?.length || document.visibilityState !== 'visible') return;
+  if (document.querySelector('dialog[open]')) return;          // don't interrupt a form that's being filled in
+  const snooze = store.get('overdue_snooze', {});
+  const now = Date.now();
+  for (const k of Object.keys(snooze)) if (!S.myOpen.some((j) => k.startsWith(j.work_id))) delete snooze[k];   // tidy old ones
+  store.set('overdue_snooze', snooze);
+  const snoozed = (j, r) => snooze[`${j.work_id}|${r}`] > now;
+  let job = null, reason = null;
+  for (const j of S.myOpen) {
+    if (isAway(j) && !snoozed(j, 'away')) { job = j; reason = 'away'; break; }
+    if (isOverdue(j) && !snoozed(j, 'time')) { job = j; reason = 'time'; break; }
+  }
+  if (!job) return;
+  reminder = { job, reason };
+  $('overdue-asset').textContent = job.asset_name || job.asset_id;
+  if (reason === 'away') {
+    $('overdue-title').textContent = 'Have you left this asset?';
+    $('overdue-text').textContent =
+      `You're about ${fmtDist(awayDistance(job))} from this asset and still logged on to it. If you've finished, please Log Off now.`;
+  } else {
+    $('overdue-title').textContent = 'Still working here?';
+    $('overdue-text').textContent =
+      `You've been logged on for ${fmtLength(now - new Date(job.work_started_at).getTime())} (since ${fmtWhen(job.work_started_at)}). ` +
+      `If you've finished, please Log Off now.`;
+  }
+  $('dlg-overdue').showModal();
+}
+
+// Called on every GPS update: redraw the banner when "moved away" changes, and remind once
+let lastAwayKey = '';
+function checkAway() {
+  if (!S.myOpen?.length) return;
+  const key = S.myOpen.map((j) => (isAway(j) ? j.work_id : '')).join(',');
+  if (key === lastAwayKey) return;
+  lastAwayKey = key;
+  renderActiveJobs();
+  checkOverdue();
+}
+
+function wireOverdue() {
+  $('btn-overdue-logoff').addEventListener('click', () => {
+    $('dlg-overdue').close();
+    if (reminder) openLogOff(jobAsset(reminder.job));
+  });
+  $('btn-overdue-snooze').addEventListener('click', () => {
+    if (reminder) {
+      const snooze = store.get('overdue_snooze', {});
+      snooze[`${reminder.job.work_id}|${reminder.reason}`] = Date.now() + SNOOZE_MS[reminder.reason];
+      store.set('overdue_snooze', snooze);
+    }
+    $('dlg-overdue').close();
+    toast(`OK - we'll remind you again in ${reminder?.reason === 'away' ? '30 minutes' : 'an hour'}.`);
+    checkOverdue();   // the other reminder may still be due
+  });
 }
 
 // Banner under the main buttons: "You're logged on to Joint 0001 since 9:14"
@@ -780,18 +896,24 @@ function renderActiveJobs() {
   box.innerHTML = '';
   box.hidden = !S.myOpen.length;
   for (const j of S.myOpen) {
-    const a = S.assets.find((x) => x.layer === j.asset_layer && x.asset_id === j.asset_id)
-      || { layer: j.asset_layer, asset_id: j.asset_id, name: j.asset_name, lat: j.asset_lat, lon: j.asset_lon, asset_type: j.asset_layer };
-    box.append(el('div', { class: 'active-job' },
+    const a = jobAsset(j);
+    const late = isOverdue(j);
+    const away = isAway(j);
+    box.append(el('div', { class: `active-job${late || away ? ' overdue' : ''}` },
       el('span', { class: 'work-tag open' }, 'OPEN'),
       el('div', { class: 'active-job-text' },
         el('div', {}, `You're logged on to:`),
         el('strong', { class: 'active-job-asset' }, j.asset_name || j.asset_id),
-        el('div', {}, `since ${fmtWhen(j.work_started_at)}`)),
-      a.lat != null ? el('button', { class: 'btn small', onclick: () => {
-        S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
-        showOnMap(a);
-      } }, 'Show') : null));
+        el('div', {}, `since ${fmtWhen(j.work_started_at)}`),
+        away ? el('div', { class: 'overdue-note' }, `You've moved away - please Log Off`)
+          : late ? el('div', { class: 'overdue-note' }, `Over ${SETTINGS.logon_overdue_hours || 4} hours - please Log Off`) : null),
+      el('div', { class: 'active-job-btns' },
+        // Log Off works from anywhere, even when the asset is no longer in the list or on the map
+        el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off'),
+        a.lat != null ? el('button', { class: 'btn small', onclick: () => {
+          S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
+          showOnMap(a);
+        } }, 'Show') : null)));
   }
 }
 
@@ -836,9 +958,22 @@ function workButton(a, compact = false) {
 
 // Small, tidy popup for the map: just the asset name (centred) and the Log On / Log Off button
 function buildPopup(a) {
+  const w = S.work[assetKey(a)];
+  const mine = w?.status === 'Open' && w.is_mine;
+  if (!mine) {
+    return el('div', { class: 'popup' },
+      el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id)),
+      ...workButton(a, true));
+  }
+  // Logged on here: Log Off is the main button; the small warning button opens Log Joint Incident
+  const joint = el('button', { type: 'button', class: 'popup-joint', 'aria-label': 'Log Joint Incident', title: 'Log Joint Incident',
+    onclick: () => { S.map?.closePopup?.(); openJointIncident(a); } });
+  joint.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true">'
+    + '<path d="M12 2.6 1.4 21h21.2z" fill="#d92d20" stroke="#d92d20" stroke-width="1.6" stroke-linejoin="round"/>'
+    + '<rect x="10.9" y="8.6" width="2.2" height="7" rx="1.1" fill="#fff"/><circle cx="12" cy="18.1" r="1.25" fill="#fff"/></svg>';
   return el('div', { class: 'popup' },
     el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id)),
-    ...workButton(a, true));
+    el('div', { class: 'popup-actions' }, ...workButton(a, true), joint));
 }
 
 // ---- photos
@@ -1001,7 +1136,7 @@ function updateLogOffForm() {
 async function submitLogOff(e) {
   e.preventDefault();
   const a = logOffAsset;
-  const job = S.work[assetKey(a)] || S.myOpen.find((j) => j.asset_layer === a.layer && j.asset_id === a.asset_id);
+  const job = myOpenJob(a);
   const msg = formMsg('logoff-msg');
   if (!job?.work_id) { msg('Could not find the open job for this asset. Refresh and try again.', true); return; }
   $('btn-logoff-submit').disabled = true;
@@ -1020,6 +1155,60 @@ async function submitLogOff(e) {
     console.error(err);
     msg(friendlyError(err), true);
     updateLogOffForm();
+  }
+}
+
+// My open job on this asset (from the banner list first, then the map/list status)
+function myOpenJob(a) {
+  const w = S.work[assetKey(a)];
+  return S.myOpen.find((j) => j.asset_layer === a.layer && j.asset_id === a.asset_id)
+    || (w?.status === 'Open' && w.is_mine ? w : null);
+}
+
+// ---- Log Joint Incident: an issue with the asset I'm logged on to.
+// Saved on that job's work log (asset_integrity_issue / integrity_issue_comments)
+// with photos in work_log_photos (tag 'integrity').
+
+let jointAsset = null;
+let jointPhotos = null;
+
+function openJointIncident(a) {
+  if (!navigator.onLine) { toast('You need a connection to log a joint incident.'); return; }
+  if (!myOpenJob(a)) { toast('Log On to this asset first.'); return; }
+  jointAsset = a;
+  $('joint-asset').textContent = a.name || a.asset_id;
+  $('in-joint-comment').value = '';
+  jointPhotos.reset();
+  $('joint-msg').textContent = '';
+  updateJointForm();
+  $('dlg-joint').showModal();
+}
+
+function updateJointForm() {
+  const ok = !!($('in-joint-comment').value.trim() && jointPhotos.list.length);
+  $('btn-joint-submit').disabled = !ok;
+  $('joint-hint').textContent = ok ? '' : 'Describe the incident and take at least one photo to submit.';
+}
+
+async function submitJointIncident(e) {
+  e.preventDefault();
+  const a = jointAsset;
+  const job = myOpenJob(a);
+  const msg = formMsg('joint-msg');
+  if (!job?.work_id) { msg('Could not find the open job for this asset. Refresh and try again.', true); return; }
+  $('btn-joint-submit').disabled = true;
+  try {
+    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+    const photos = await uploadPhotos(jointPhotos.list, job.work_id, `${a.name || a.asset_id}_integrity_${stamp}`, msg);
+    msg('Saving…');
+    await S.api.logJointIncident({ workId: job.work_id, comments: $('in-joint-comment').value.trim(), photos });
+    $('dlg-joint').close();
+    toast('Joint incident saved to this job. Thank you.', 4000);
+  } catch (err) {
+    console.error(err);
+    msg(friendlyError(err), true);
+    updateJointForm();
   }
 }
 
@@ -1085,6 +1274,11 @@ function wireWorkForms() {
   $('form-incident').addEventListener('submit', submitIncident);
   $('btn-incident-cancel').addEventListener('click', () => $('dlg-incident').close());
   $('btn-incident').addEventListener('click', openIncident);
+
+  jointPhotos = photoPicker('btn-joint-photo', 'in-joint-photo', 'joint-thumbs', updateJointForm);
+  $('in-joint-comment').addEventListener('input', updateJointForm);
+  $('form-joint').addEventListener('submit', submitJointIncident);
+  $('btn-joint-cancel').addEventListener('click', () => $('dlg-joint').close());
 }
 
 // ---------------------------------------------------------------------------
@@ -1156,8 +1350,15 @@ async function init() {
     if (document.visibilityState === 'visible') {
       // Coming back to the app: refresh the position so distances are current
       if (S.access) navigator.geolocation.getCurrentPosition(onFix, () => {}, { enableHighAccuracy: true, maximumAge: 10000 });
+      if (S.access) pollWorkStatus();   // pick up anything colleagues logged while the app was in the background
     }
   });
+  setInterval(() => {                                             // and every 45 seconds while it's open
+    if (!S.access) return;
+    pollWorkStatus();
+    if (!navigator.onLine) { renderActiveJobs(); checkOverdue(); }  // long-job reminder works offline too
+  }, 45000);
+  wireOverdue();
 
   const unconfigured = !DEMO && (!C.supabaseUrl || C.supabaseUrl.includes('YOUR-PROJECT-REF'));
   if (unconfigured) {

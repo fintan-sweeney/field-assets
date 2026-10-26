@@ -220,6 +220,35 @@
     </form>
   </dialog>
 
+  <!-- Log Joint Incident: an issue with the asset I'm logged on to (saved on the work log) -->
+  <dialog id="dlg-joint" class="sheet work-sheet" aria-label="Log Joint Incident">
+    <form id="form-joint" class="stack" method="dialog">
+      <p id="joint-asset" class="work-asset"></p>
+      <p class="joint-title">Log Joint Incident</p>
+      <label for="in-joint-comment">Describe the incident or issue:</label>
+      <textarea id="in-joint-comment" rows="4" placeholder="What's wrong with the joint?"></textarea>
+      <label>Photos <span class="muted">(at least one)</span></label>
+      <div id="joint-thumbs" class="thumbs"></div>
+      <button type="button" id="btn-joint-photo" class="btn">Take photo</button>
+      <input type="file" id="in-joint-photo" accept="image/*" capture="environment" hidden>
+      <p id="joint-hint" class="tiny muted"></p>
+      <p id="joint-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-joint-submit" class="btn primary" disabled>Submit</button>
+      <button type="button" id="btn-joint-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Off reminder: logged on too long, or moved away from the asset -->
+  <dialog id="dlg-overdue" class="sheet work-sheet" aria-label="Still logged on">
+    <div class="stack">
+      <p id="overdue-asset" class="work-asset"></p>
+      <p id="overdue-title" class="overdue-title">Still working here?</p>
+      <p id="overdue-text" class="overdue-text"></p>
+      <button type="button" id="btn-overdue-logoff" class="btn danger-fill">Log Off now</button>
+      <button type="button" id="btn-overdue-snooze" class="btn">Still working</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
