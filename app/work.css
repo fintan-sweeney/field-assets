@@ -298,7 +298,7 @@ body { background: var(--page-bg); }
 /* ---- list items: tighter, cleaner ---- */
 .asset-list { gap: 4px; }
 .asset { border-radius: 10px; }
-.asset-head { padding: 6px 11px; min-height: 40px; gap: 1px 10px; }      /* compact, still tappable */
+.asset-head { padding: 6px 11px; min-height: 55px; gap: 1px 10px; align-content: center; }   /* every item the same height, name centred when there's no "By ... @" line */
 .asset-head .asset-name { font-size: 1rem; line-height: 1.2; }
 .asset-status .work-tag { font-size: .72rem; padding: 1px 8px; }
 .asset-work { font-size: .8rem; }
