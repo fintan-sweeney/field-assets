@@ -1,0 +1,313 @@
+/* Field Assets - Log On / Log Off styles (kept separate from styles.css) */
+
+:root {
+  --open: #d92d20;          /* open job: red */
+  --open-bg: #fde8e7;
+  --closed: #ff8c1a;        /* recently closed (7 days): bright orange */
+  --closed-ink: #c2410c;
+  --closed-bg: #ffedd5;
+  --idle: #22c55e;          /* no recent job: bright green */
+}
+/* Always use the light theme, even when the phone is set to dark mode */
+:root { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #f3f5f4;
+    --surface: #ffffff;
+    --surface-2: #e8eceb;
+    --text: #0e1a1b;
+    --muted: #55605f;
+    --border: #cfd6d4;
+    --brand: #0f3d3e;
+    --ok: #1d7a46;
+    --ok-bg: #dcf2e4;
+    --warn: #8a4b00;
+    --warn-bg: #ffe9cc;
+    --danger: #b42318;
+    color-scheme: light;
+  }
+  .btn.link { color: var(--brand); }
+}
+
+/* ---- status tags (list, popup, banner) ---- */
+.work-tag {
+  display: inline-block; margin-left: 8px; padding: 1px 8px;
+  border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .04em;
+  vertical-align: middle;
+}
+.work-tag.open   { background: var(--pt-open, #22c55e);   color: #fff; }   /* same as the map points */
+.work-tag.closed { background: var(--pt-closed, #111418); color: #fff; }
+
+/* ---- map markers ----
+   open    green (logged on)
+   recent  black + green outline (closed in the last 2 days)
+   idle    black (closed)                                      */
+:root { --pt-open: #22c55e; --pt-closed: #111418; }
+.asset-icon { display: flex; align-items: center; justify-content: center; }
+.asset-marker {
+  position: relative; box-sizing: border-box; flex: none;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--pt-closed); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.45);
+}
+.asset-marker.open {
+  width: 20px; height: 20px;
+  background: var(--pt-open); border-width: 3px;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, .6);
+  animation: open-pulse 1.8s ease-out infinite;
+}
+.asset-marker.recent {
+  width: 18px; height: 18px; border: 3px solid var(--pt-open);
+  box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,.45);
+}
+@keyframes open-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); }
+  70%  { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+/* ---- asset ID labels (street-level zoom only) ---- */
+.asset-label-icon { pointer-events: none; }
+.asset-label {
+  display: block; padding: 0 3px; white-space: nowrap;
+  font: 700 11.5px/15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #000;
+  /* solid white outline (halo) so labels stand out from roads and map text */
+  -webkit-text-stroke: 3px #fff; paint-order: stroke fill;
+  text-shadow: 1px 1px 0 #fff, -1px 1px 0 #fff, 1px -1px 0 #fff, -1px -1px 0 #fff,
+               0 0 3px rgba(255,255,255,.9), 0 1px 4px rgba(0,0,0,.25);
+}
+
+/* ---- map credits: small (i) button instead of the full-width bar ---- */
+.map-credits { display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 6px; margin: 0 10px 10px 0 !important; }
+.map-credits-btn {
+  width: 22px; height: 22px; flex: none; padding: 0; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,.2); background: rgba(255,255,255,.9); color: #55605f;
+  font: italic 700 13px/20px Georgia, serif; cursor: pointer;
+}
+.map-credits-text {
+  max-width: 240px; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,.95);
+  box-shadow: 0 1px 4px rgba(0,0,0,.25); font-size: 11px; line-height: 1.4; color: #333;
+}
+.map-credits-text[hidden] { display: none; }
+
+/* ---- map popup (compact) ---- */
+.leaflet-popup-content { margin: 12px 16px; line-height: 1.3; }
+.leaflet-popup-content-wrapper { border-radius: 10px; }
+.popup { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: .88rem; }
+.popup-title { font-size: .96rem; text-align: center; }
+.popup-note { text-align: center; }
+.popup-title .work-tag { margin-left: 6px; font-size: .62rem; padding: 0 6px; }
+.popup-sub { color: #55605f; }
+.popup .btn, .popup .btn.small {          /* button sized to its text, with even padding all round */
+  width: auto; align-self: center; min-height: 0;
+  padding: 15px 28px; font-size: 1.12rem; font-weight: 800; line-height: 1.2; border-radius: 10px; margin-top: 2px;   /* taller, easy to tap */
+}
+.popup .btn:disabled, .asset-work-actions .btn:disabled { opacity: .45; }
+.popup-note { margin-top: 2px; font-size: .78rem; font-weight: 600; color: #8a4b00; }
+.btn.danger-fill { background: var(--open); border-color: var(--open); color: #fff; }   /* Log Off buttons: red */
+.btn.logon-btn, #btn-logon-submit { background: #22c55e; border-color: #22c55e; color: #fff; font-weight: 800; }   /* same green as an Open point */
+#btn-logon-submit:disabled { opacity: .45; }
+.btn.small { min-height: 34px; padding: 0 10px; font-size: .85rem; border-radius: 9px; }
+
+/* ---- list: who opened / closed ---- */
+.asset-status { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
+.asset-status .work-tag { margin-left: 0; font-size: .78rem; padding: 2px 10px; }
+.asset-work { grid-column: 1 / -1; font-size: .85rem; font-weight: 700; }
+.asset-work { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.asset-work-who { text-align: left; overflow-wrap: anywhere; }
+.asset-work-when { text-align: right; white-space: nowrap; }
+.asset-work.open   { color: #16a34a; }          /* green, like the OPEN tag (a shade darker to read on white) */
+.asset-work.closed { color: var(--pt-closed); } /* black, like the CLOSED tag */
+/* Expanded list item: Log On (or Log Off) and Show on map side by side, half width each */
+.asset-work-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 8px; }
+.asset-work-actions .btn { min-height: 52px; font-size: 1rem; margin: 0; padding: 0 8px; }
+.asset-work-actions > .btn:only-of-type { grid-column: 1 / -1; }   /* only Show on map (someone else's open job) */
+.asset-work-actions .popup-note { grid-column: 1 / -1; order: 1; } /* "You're 60 m away…" goes under both buttons */
+
+/* ---- Log Incident button ---- */
+.incident-btn { background: transparent; color: var(--open); border-color: var(--open); }
+.actions .btn { padding: 0 12px; font-size: 1.08rem; gap: 6px; white-space: nowrap; }
+/* List / Map: slim and discreet, so Distance and Log Incident stand out */
+.tabs { padding: 3px; gap: 3px; background: rgba(255,255,255,.06); border: 1px solid var(--page-line, #2b3d3f); border-radius: 10px; }
+.tabs .tab { min-height: 32px; font-size: .85rem; font-weight: 600; color: #9fb0ae; border-radius: 7px; }
+.tabs .tab.active { background: rgba(255,255,255,.14); color: #fff; box-shadow: none; }
+@media (max-width: 400px) { .incident-btn svg { display: none; } }
+
+/* ---- Distance dropdown (styled like the old Find Assets button) ---- */
+.distance-btn { position: relative; justify-content: center; gap: 4px; cursor: pointer; }
+.distance-label { white-space: nowrap; }
+.distance-arrow { flex: none; margin-right: -6px; }
+.distance-btn select {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; font-size: 16px;   /* invisible, but opens the phone's picker */
+  border: 0; appearance: none; -webkit-appearance: none;
+}
+.distance-btn, .distance-btn select { outline: none; -webkit-tap-highlight-color: transparent; }
+.distance-btn select:focus { outline: none; }
+
+/* ---- "you're logged on" banner ---- */
+
+/* ---- Log On / Log Off forms ---- */
+.work-sheet { max-height: 92vh; overflow-y: auto; }
+.work-asset { margin: -4px 0 4px; font-weight: 700; color: var(--muted); }
+.work-question { margin: 6px 0 0; font-weight: 700; font-size: 1.05rem; }
+.yes-no { display: flex; gap: 28px; }
+.yes-no .check { font-size: 1.1rem; font-weight: 700; }
+textarea {
+  width: 100%; padding: 10px 14px; font: inherit; line-height: 1.4; resize: vertical;
+  color: var(--text); background: var(--surface);
+  border: 2px solid var(--border); border-radius: 10px;
+}
+textarea:focus { outline: none; border-color: var(--brand); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.thumbs:empty { display: none; }
+.thumb { position: relative; width: 84px; height: 84px; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); }
+.thumb-del {
+  position: absolute; top: -8px; right: -8px; width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid #fff; background: #b42318; color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
+}
+
+/* ---- top banner: logo left, title centred, menu right ---- */
+.topbar {
+  display: grid;
+  grid-template-columns: 64px 1fr 64px;
+  align-items: center;
+  min-height: 74px;                                          /* taller banner so it stands out */
+  padding: calc(env(safe-area-inset-top) + 10px) 12px 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
+  position: relative; z-index: 5;
+}
+.topbar-logo { justify-self: start; height: 40px; width: auto; display: block; }
+@media (max-width: 360px) { .topbar { grid-template-columns: 50px 1fr 50px; padding-left: 8px; padding-right: 8px; } .topbar-logo { height: 34px; } }
+.topbar-title {
+  text-align: center; font-weight: 800; font-size: clamp(1.1rem, 5.6vw, 1.35rem); letter-spacing: .01em;   /* bigger, but still fits small phones */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar #btn-menu { justify-self: end; }
+
+/* ---- list summary ("12 assets within 100 m · updated …") ---- */
+.list-summary { text-align: center; }
+
+/* ---- list item title: the asset name is the main label ---- */
+.asset-head .asset-name { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+
+/* ---- map key (legend): button bottom-left, opens a small panel with a × to close ---- */
+.map-panel { position: relative; }
+.legend-toggle, .map-legend {
+  position: absolute; left: 26px; bottom: calc(env(safe-area-inset-bottom) + 26px); z-index: 450;
+}
+.legend-toggle {
+  width: 44px; height: 44px; border-radius: 50%; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid rgba(0, 0, 0, .12); box-shadow: 0 1px 6px rgba(0, 0, 0, .3);
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.legend-toggle[hidden] { display: none; }
+.map-legend {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 40px 10px 12px; border-radius: 12px;   /* room on the right for the × */
+  background: #fff; box-shadow: 0 1px 8px rgba(0, 0, 0, .3);
+  font-size: .82rem; font-weight: 700; color: #0e1a1b;
+}
+.map-legend[hidden] { display: none; }
+.map-legend > div { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.legend-close {
+  position: absolute; top: 3px; right: 3px;
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: #0e1a1b; font-size: 22px; line-height: 1; cursor: pointer;
+}
+.legend-close:active { background: #e8eceb; }
+.map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 16px; height: 16px; margin: 0; }
+.map-legend .asset-marker.open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.map-legend .asset-marker.recent { border-width: 3px; }
+.map-legend .legend-you { border-width: 2px; box-shadow: 0 0 0 2px rgba(26, 115, 232, .4); }
+
+/* ---- Log On page: heading, asset, question and field labels centred ---- */
+#form-logon .work-asset { text-align: center; }   /* Log On: heading (asset name) centred, everything else left-aligned */
+#form-logon .work-asset, #form-logoff .work-asset, #dlg-overdue .work-asset, #form-joint .work-asset { margin: 2px 0 6px; font-size: 1.35rem; font-weight: 800; color: var(--text); }   /* asset name is the heading */
+
+/* ---- "you're logged on" banner: three centred lines (label / asset / since) ---- */
+/* Log Off comment: a line space under the label; typing (and the hint) start at the left so the cursor sits where the hint begins */
+#form-logoff label[for="work-comment"] { margin-bottom: 10px; }
+#form-logoff textarea, #form-logoff textarea::placeholder { text-align: left; }
+/* Log Off: heading (asset name) centred, everything else left-aligned */
+#form-logoff .work-asset { text-align: center; }
+/* Log Incident: heading centred */
+#form-incident h2 { text-align: center; }
+
+/* ---- long job reminder ---- */
+#dlg-overdue .work-asset, .overdue-title, .overdue-text { text-align: center; }
+.overdue-title { margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--open); }
+.overdue-text { margin: 0 0 6px; line-height: 1.4; }
+
+
+/* ---- map popup when logged on: Log Off (main) + warning button that opens Log Joint Incident ---- */
+.popup-actions { display: flex; align-items: center; gap: 8px; }
+.popup-joint {
+  flex: none; width: 48px; height: 48px; padding: 0; border-radius: 10px; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; border: 2px solid var(--open); cursor: pointer; -webkit-tap-highlight-color: transparent;   /* red outline */
+}
+.popup-joint:active { background: var(--open-bg); }
+
+/* ---- Log Joint Incident form: heading centred, everything else left ---- */
+#form-joint .work-asset, .joint-title { text-align: center; }
+.joint-title { margin: -4px 0 4px; font-size: 1rem; font-weight: 800; color: var(--open); }
+
+/* ---- logged-on banner: Log Off (works from anywhere) above Show ---- */
+
+/* ---- pop-up messages (e.g. "we'll remind you again in 30 minutes"): centred text ---- */
+.toast { text-align: center; }
+
+/* ---- dark page background behind the cards and buttons (header, cards, banner, tabs and map unchanged) ---- */
+:root { --page-bg: #142022; --page-line: #2b3d3f; --page-text: #b9c7c5; }
+body { background: var(--page-bg); }
+.status-panel { background: var(--page-bg); border-bottom-color: var(--page-line); }
+.list-summary.muted, .list-summary, .asset-list .empty, .position { color: var(--page-text); }
+.position strong { color: #eef3f2; }
+.actions .btn.incident-btn { background: #fff; }                        /* Log Incident stays white with the red outline */
+.actions .btn.distance-btn { border: 2px solid #cfe3df; }               /* light outline so Distance stands out on the dark background */
+
+/* ---- list: a job is open on this joint - slight green outline ---- */
+.asset.job-open { border-color: #22c55e; box-shadow: 0 0 0 1px #22c55e; }
+
+/* ---- "logged on" strip: compact, one row ---- */
+.active-jobs { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }   /* top of the panel, above Distance / Log Incident */
+.active-job {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  padding: 7px 8px 7px 12px; border-radius: 12px;
+  background: #ecfdf3; border: 1px solid #86efac;
+}
+.aj-dot {
+  flex: none; width: 10px; height: 10px; border-radius: 50%; background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); animation: aj-pulse 1.8s ease-out infinite;
+}
+@keyframes aj-pulse {          /* small pulse so it doesn't run into the text */
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, .55); }
+  70%  { box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+.active-job-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.active-job-asset { font-size: .95rem; font-weight: 800; color: #0e1a1b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aj-since { font-size: .78rem; color: #3f6150; }
+.active-job-btns { flex: none; display: flex; gap: 6px; }
+.active-job-btns .btn { min-height: 32px; padding: 0 12px; font-size: .85rem; font-weight: 700; border-radius: 8px; }
+.active-job-btns .aj-show { background: #fff; border: 1px solid #b7dcc6; color: #14532d; }
+.active-job.overdue { border-color: var(--open); box-shadow: 0 0 0 1px var(--open); }   /* red outline: over 4 hours or moved away */
+
+/* ---- list items: tighter, cleaner ---- */
+.asset-list { gap: 4px; }
+.asset { border-radius: 10px; }
+.asset-head { padding: 6px 11px; min-height: 55px; gap: 1px 10px; align-content: center; }   /* every item the same height, name centred when there's no "By ... @" line */
+.asset-head .asset-name { font-size: 1rem; line-height: 1.2; }
+.asset-status .work-tag { font-size: .72rem; padding: 1px 8px; }
+.asset-work { font-size: .8rem; }
+.asset-body { padding: 0 11px 8px; }
+.asset-body dl { margin: 6px 0 8px; gap: 1px 12px; font-size: .85rem; line-height: 1.3; }
+.asset-work-actions { gap: 6px; margin: 0; }
+.asset-work-actions .btn { min-height: 40px; font-size: .92rem; border-radius: 9px; }
+/* list: an open job past the time limit (anyone's), or my job when I've moved away - red outline */
+.asset.job-alert { border-color: var(--open); box-shadow: 0 0 0 1px var(--open); }
+/* reminder pop-up: Still working (left) and Log Off now (right) side by side */
+.overdue-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.overdue-btns .btn { margin: 0; white-space: nowrap; padding: 0 8px; }

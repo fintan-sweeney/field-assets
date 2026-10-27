@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f3d3e">
+  <meta name="color-scheme" content="light">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Enclosures Field App</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="work.css">
+  <style>
+    /* Password boxes match the other inputs (kept here so styles.css is unchanged) */
+    input[type=password] {
+      width: 100%; min-height: var(--tap, 52px); padding: 0 14px; font: inherit;
+      color: var(--text); background: var(--surface);
+      border: 2px solid var(--border); border-radius: 10px;
+    }
+    input[type=password]:focus { outline: none; border-color: var(--brand); }
+    /* One main button across the full width; hide the status row when it's empty */
+    .actions { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .status-row:not(:has(.pill:not([hidden]))) { display: none; }
+  </style>
+  <script src="config.js"></script>
+</head>
+<body>
+
+  <!-- Loading -->
+  <section id="view-loading" class="view center">
+    <div class="spinner" aria-hidden="true"></div>
+    <p class="muted">Loading…</p>
+  </section>
+
+  <!-- Sign in -->
+  <section id="view-login" class="view center" hidden>
+    <div class="card login-card">
+      <img src="icons/icon.svg" alt="" class="login-logo">
+      <h1 class="app-name">Enclosures Field App</h1>
+      <p id="login-intro" class="muted">Sign in with the email address you were invited with.</p>
+
+      <form id="form-password" class="stack" hidden>
+        <label for="pw-email">Email</label>
+        <input id="pw-email" type="email" autocomplete="username" inputmode="email" required placeholder="you@company.com.au">
+        <label for="pw-password">Password</label>
+        <input id="pw-password" type="password" autocomplete="current-password" required>
+        <label class="check"><input type="checkbox" id="pw-show"> Show password</label>
+        <button type="submit" class="btn primary">Sign in</button>
+      </form>
+
+      <form id="form-email" class="stack" hidden>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" inputmode="email" required placeholder="you@company.com.au">
+        <button type="submit" class="btn primary">Email me a sign-in code</button>
+      </form>
+
+      <form id="form-code" class="stack" hidden>
+        <p>We emailed <strong id="code-email"></strong>. Enter the code below, or open the sign-in link in the email on this device.</p>
+        <label for="code">Sign-in code</label>
+        <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="10" required class="code-input">
+        <button type="submit" class="btn primary">Sign in</button>
+        <button type="button" id="btn-code-back" class="btn link">Use a different email</button>
+      </form>
+
+      <p id="login-msg" class="msg" role="status"></p>
+    </div>
+  </section>
+
+  <!-- No access -->
+  <section id="view-denied" class="view center" hidden>
+    <div class="card login-card">
+      <h1>Access not active</h1>
+      <p id="denied-msg" class="muted">Your access to this app is not active. Contact your supervisor if you think this is a mistake.</p>
+      <button id="btn-denied-signout" class="btn">Sign out</button>
+    </div>
+  </section>
+
+  <!-- Main -->
+  <section id="view-main" class="view main" hidden>
+    <header class="topbar">
+      <img class="topbar-logo" src="icons/fibreconx-logo.svg" alt="FibreconX" width="44" height="32">
+      <span class="app-name topbar-title">Enclosures Field App</span>
+      <button id="btn-menu" class="icon-btn" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      </button>
+    </header>
+
+    <div class="status-panel">
+      <!-- "Logged on" strip: directly under the app banner -->
+      <div id="active-jobs" class="active-jobs" hidden></div>
+      <div class="status-row">
+        <span id="offline-pill" class="pill warn" hidden>Offline</span>
+      </div>
+      <div id="position-text" class="position" hidden></div>
+      <div class="actions">
+        <label class="btn primary big distance-btn" for="sel-distance">
+          <span class="distance-label">Distance</span>
+          <svg class="distance-arrow" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+          <select id="sel-distance" aria-label="Distance">
+          <option value="50">50 metres</option>
+          <option value="100">100 metres</option>
+          <option value="150">150 metres</option>
+          <option value="200">200 metres</option>
+          <option value="250">250 metres</option>
+          <option value="300">300 metres</option>
+          <option value="350">350 metres</option>
+          <option value="400">400 metres</option>
+          <option value="450">450 metres</option>
+          <option value="500">500 metres</option>
+          <option value="0">Show all</option>
+          </select>
+        </label>
+        <button id="btn-incident" class="btn big incident-btn" type="button">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+          Log Incident
+        </button>
+      </div>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button id="tab-list" class="tab active" role="tab" aria-selected="true">List</button>
+      <button id="tab-map" class="tab" role="tab" aria-selected="false">Map</button>
+    </nav>
+
+    <div id="panel-list" class="panel">
+      <div id="list-summary" class="list-summary muted"></div>
+      <ul id="asset-list" class="asset-list"></ul>
+    </div>
+    <div id="panel-map" class="panel map-panel" hidden>
+      <div id="map"></div>
+      <!-- Map key: a small button that opens the key; × closes it -->
+      <button id="btn-legend" class="legend-toggle" type="button" aria-label="Show map key" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+          <circle cx="6" cy="6.5" r="3" fill="#22c55e"/><rect x="11" y="5.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+          <circle cx="6" cy="12" r="2.4" fill="#111418" stroke="#22c55e" stroke-width="1.6"/><rect x="11" y="10.7" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+          <circle cx="6" cy="17.5" r="3" fill="#111418"/><rect x="11" y="16.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+        </svg>
+      </button>
+      <div id="map-legend" class="map-legend" role="dialog" aria-label="Map key" hidden>
+        <button id="btn-legend-close" class="legend-close" type="button" aria-label="Close map key">&times;</button>
+        <div><span class="asset-marker open"></span>Open</div>
+        <div><span class="asset-marker recent"></span>Closed (recently open)</div>
+        <div><span class="asset-marker"></span>Closed</div>
+        <div><span class="you-marker legend-you"></span>You</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Settings sheet -->
+  <dialog id="sheet-settings" class="sheet">
+    <form method="dialog" class="stack">
+      <h2>Settings</h2>
+      <div id="user-info" class="muted"></div>
+      <div id="pw-change-section" class="stack" hidden>
+        <label for="pw-new">Change password</label>
+        <input id="pw-new" type="password" autocomplete="new-password" placeholder="New password (8+ characters)">
+        <input id="pw-new2" type="password" autocomplete="new-password" placeholder="Type it again">
+        <button type="button" id="btn-change-pw" class="btn">Save new password</button>
+        <p id="pw-change-msg" class="msg" role="status"></p>
+      </div>
+      <button value="close" class="btn primary">Done</button>
+      <button type="button" id="btn-signout" class="btn danger">Sign out</button>
+      <p class="tiny muted">Your location is used only to find nearby joints and check you're at the joint. It isn't recorded or stored. If you move away from a joint you're logged on to, colleagues just see that joint outlined in red.</p>
+    </form>
+  </dialog>
+
+
+  <!-- Log On: job reference -->
+  <dialog id="dlg-logon" class="sheet work-sheet" aria-label="Log On">
+    <form id="form-logon" class="stack" method="dialog">
+      <p id="logon-asset" class="work-asset"></p>
+      <label for="in-circuit">Circuit ID</label>
+      <input id="in-circuit" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <label for="in-project">Project ID</label>
+      <input id="in-project" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <label for="in-fault">Fault ID</label>
+      <input id="in-fault" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <p id="logon-hint" class="tiny muted"></p>
+      <p id="logon-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-logon-submit" class="btn primary" disabled>Log On</button>
+      <button type="button" id="btn-logon-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Off: describe the work -->
+  <dialog id="dlg-logoff" class="sheet work-sheet" aria-label="Log Off">
+    <form id="form-logoff" class="stack" method="dialog">
+      <p id="logoff-asset" class="work-asset"></p>
+      <label for="work-comment">Describe the work carried out:</label>
+      <textarea id="work-comment" rows="4" placeholder="What work was carried out?"></textarea>
+      <p id="logoff-hint" class="tiny muted"></p>
+      <p id="logoff-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-logoff-submit" class="btn primary" disabled>Log Off</button>
+      <button type="button" id="btn-logoff-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Incident: fault or network issue -->
+  <dialog id="dlg-incident" class="sheet work-sheet">
+    <form id="form-incident" class="stack" method="dialog">
+      <h2>Log Incident</h2>
+      <p class="muted tiny" id="incident-location">Your current location will be recorded with the report.</p>
+      <label for="in-incident-type">Type of incident</label>
+      <select id="in-incident-type">
+        <option value="">Choose…</option>
+      </select>
+      <label for="in-incident-comment">Report</label>
+      <textarea id="in-incident-comment" rows="4" placeholder="Describe the fault or network issue"></textarea>
+      <label>Photos <span class="muted">(at least one)</span></label>
+      <div id="incident-thumbs" class="thumbs"></div>
+      <button type="button" id="btn-incident-photo" class="btn">Take photo</button>
+      <input type="file" id="in-incident-photo" accept="image/*" capture="environment" hidden>
+      <p id="incident-hint" class="tiny muted"></p>
+      <p id="incident-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-incident-submit" class="btn primary" disabled>Submit report</button>
+      <button type="button" id="btn-incident-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Joint Incident: an issue with the asset I'm logged on to (saved on the work log) -->
+  <dialog id="dlg-joint" class="sheet work-sheet" aria-label="Log Joint Incident">
+    <form id="form-joint" class="stack" method="dialog">
+      <p id="joint-asset" class="work-asset"></p>
+      <p class="joint-title">Log Joint Incident</p>
+      <label for="in-joint-comment">Describe the incident or issue:</label>
+      <textarea id="in-joint-comment" rows="4" placeholder="What's wrong with the joint?"></textarea>
+      <label>Photos <span class="muted">(at least one)</span></label>
+      <div id="joint-thumbs" class="thumbs"></div>
+      <button type="button" id="btn-joint-photo" class="btn">Take photo</button>
+      <input type="file" id="in-joint-photo" accept="image/*" capture="environment" hidden>
+      <p id="joint-hint" class="tiny muted"></p>
+      <p id="joint-msg" class="msg" role="status"></p>
+      <button type="submit" id="btn-joint-submit" class="btn primary" disabled>Submit</button>
+      <button type="button" id="btn-joint-cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+
+  <!-- Log Off reminder: logged on too long, or moved away from the asset -->
+  <dialog id="dlg-overdue" class="sheet work-sheet" aria-label="Still logged on">
+    <div class="stack">
+      <p id="overdue-asset" class="work-asset"></p>
+      <p id="overdue-title" class="overdue-title">Still working here?</p>
+      <p id="overdue-text" class="overdue-text"></p>
+      <div class="overdue-btns">
+        <button type="button" id="btn-overdue-snooze" class="btn">Still working</button>
+        <button type="button" id="btn-overdue-logoff" class="btn danger-fill">Log Off now</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
