@@ -1056,7 +1056,7 @@ const isOverdue = (j) => Date.now() - new Date(j.work_started_at).getTime() >= o
 const SNOOZE_MS = { time: 30 * 60000, away: 30 * 60000 };   // "Still working": remind again in 30 minutes
 const fmtLength = (ms) => {
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
-  return `${h} hour${h === 1 ? '' : 's'}${m % 60 ? ` ${m % 60} min` : ''}`;
+  return `${h} hour${h === 1 ? '' : 's'}${m % 60 ? ` ${m % 60} min${m % 60 === 1 ? '' : 's'}` : ''}`;
 };
 
 // How far I am from the job's asset, or null if the GPS isn't good enough to say
@@ -1090,10 +1090,8 @@ function checkOverdue() {
     $('overdue-title').textContent = 'Are you finished?';
     $('overdue-text').textContent = `You're about ${fmtDist(awayDistance(job))} away.`;
   } else {
-    $('overdue-title').textContent = 'Still working here?';
-    $('overdue-text').textContent =
-      `You've been logged on for ${fmtLength(now - new Date(job.work_started_at).getTime())} (since ${fmtWhen(job.work_started_at)}). ` +
-      `If you've finished, please Log Off now.`;
+    $('overdue-title').textContent = 'Are you finished?';
+    $('overdue-text').textContent = `You're logged on ${fmtLength(now - new Date(job.work_started_at).getTime())}.`;
   }
   $('dlg-overdue').showModal();
 }
