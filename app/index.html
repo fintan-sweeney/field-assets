@@ -110,6 +110,7 @@
           <option value="400">400 metres</option>
           <option value="450">450 metres</option>
           <option value="500">500 metres</option>
+          <option value="0">Show all</option>
           </select>
         </label>
         <button id="btn-incident" class="btn big incident-btn" type="button">
@@ -135,7 +136,7 @@
       <button id="btn-legend" class="legend-toggle" type="button" aria-label="Show map key" aria-expanded="false">
         <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
           <circle cx="6" cy="6.5" r="3" fill="#22c55e"/><rect x="11" y="5.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
-          <circle cx="6" cy="12" r="2.4" fill="#111418" stroke="#ff8c1a" stroke-width="1.6"/><rect x="11" y="10.7" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+          <circle cx="6" cy="12" r="2.4" fill="#111418" stroke="#22c55e" stroke-width="1.6"/><rect x="11" y="10.7" width="10" height="2.6" rx="1.3" fill="#55605f"/>
           <circle cx="6" cy="17.5" r="3" fill="#111418"/><rect x="11" y="16.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
         </svg>
       </button>
@@ -143,8 +144,6 @@
         <button id="btn-legend-close" class="legend-close" type="button" aria-label="Close map key">&times;</button>
         <div><span class="asset-marker open"></span>Open</div>
         <div><span class="asset-marker recent"></span>Closed (recently open)</div>
-        <div><span class="asset-marker both"></span>Closed (recently open &amp; joint issue)</div>
-        <div><span class="asset-marker issue"></span>Closed (joint issue)</div>
         <div><span class="asset-marker"></span>Closed</div>
         <div><span class="you-marker legend-you"></span>You</div>
       </div>

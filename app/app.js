@@ -132,6 +132,17 @@ async function supabaseBackend() {
       if (error) throw error;
       return data;
     },
+    // Whole network (Distance > Show all), fetched 1000 rows at a time
+    async allAssets() {
+      const page = 1000, out = [];
+      for (let from = 0; ; from += page) {
+        const { data, error } = await sb.rpc('all_assets').range(from, from + page - 1);
+        if (error) throw error;
+        out.push(...(data || []));
+        if (!data || data.length < page) break;
+      }
+      return out;
+    },
     async workStatus(keys) {
       const { data, error } = await sb.rpc('asset_work_status', { p_assets: keys, p_closed_days: SETTINGS.closed_visible_days });
       if (error) throw error;
@@ -239,8 +250,13 @@ function demoBackend() {
       store.set('demo_jobs', jobs);
       return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_mins: job.duration_mins, closed_by_name: 'Demo User' };
     },
+    async allAssets() {
+      if (!assets) throw new Error('Search once first');
+      return assets.map((a) => ({ ...a }));
+    },
     async workStatus(keys) {
       const jobs = store.get('demo_jobs', {});
+      if (!keys) return Object.values(jobs);
       return keys.map((k) => jobs[`${k.layer}|${k.asset_id}`]).filter(Boolean);
     },
     async myOpenWork() {
@@ -534,6 +550,8 @@ function onFix(pos) {
 function findNearMe() {
   if (!('geolocation' in navigator)) { toast('This device cannot provide location.'); return; }
   const btn = $('sel-distance');
+  // A GPS position from the last 20 seconds is good enough: search straight away
+  if (S.fix && Date.now() - S.fix.time.getTime() < 20000) { if (!S.querying) runQuery(); return; }
   btn.disabled = true;
   navigator.geolocation.getCurrentPosition(
     (pos) => { btn.disabled = false; onFix(pos); if (!S.querying) runQuery(); },
@@ -546,10 +564,17 @@ function findNearMe() {
 // Nearby assets
 // ---------------------------------------------------------------------------
 
+// Distance "Show all" is stored as radius 0
+const showingAll = () => S.radius === 0;
+
 function maybeQuery(force = false) {
   const f = S.fix;
   if (!f || S.querying) return;
   const q = S.lastQuery;
+  if (showingAll()) {                         // whole network already loaded: no need to re-search when moving
+    if (force || !q || q.radius !== 0) runQuery();
+    return;
+  }
   const moved = q ? haversine(q.lat, q.lon, f.lat, f.lon) : Infinity;
   // Re-search after moving a set distance (sooner when the radius is small)
   if (force || !q || q.radius !== S.radius || moved >= Math.min(C.requeryDistanceM, S.radius / 2)) runQuery();
@@ -560,14 +585,19 @@ async function runQuery() {
   if (!f) { toast('Waiting for your location…'); return; }
   if (!navigator.onLine) { toast('Offline - showing the last list'); return; }
   S.querying = true;
-  $('list-summary').textContent = 'Searching…';
+  $('list-summary').textContent = showingAll() ? 'Loading the whole network…' : 'Searching…';
   try {
-    const rows = await S.api.nearest(f.lat, f.lon, C.maxResults, S.radius);
+    const all = showingAll();
+    if (all && !S.assets.length) await S.api.nearest(f.lat, f.lon, C.maxResults, 500);   // demo: make sure there's data
+    const rows = all ? await S.api.allAssets() : await S.api.nearest(f.lat, f.lon, C.maxResults, S.radius);
+    if (S.lastQuery?.radius !== S.radius) S.mapFitted = false;   // re-fit the map when switching to/from Show all
     S.assets = rows;
     S.assetsAt = Date.now();
     S.lastQuery = { lat: f.lat, lon: f.lon, radius: S.radius };
-    store.set('assets_cache', rows);
-    store.set('assets_cache_at', S.assetsAt);
+    if (!all) {                               // the whole network is too big to keep for offline use
+      store.set('assets_cache', rows);
+      store.set('assets_cache_at', S.assetsAt);
+    }
     await refreshWorkStatus();
     renderList();
     renderMapAssets();
@@ -597,14 +627,21 @@ function renderList() {
   if (!S.assets.length) {
     summary.textContent = '';
     list.append(el('li', { class: 'empty' },
-      S.lastQuery ? `No assets within ${fmtDist(S.radius)}. Try a larger radius in Settings.`
+      S.lastQuery ? (showingAll() ? 'No assets in the network yet.' : `No assets within ${fmtDist(S.radius)}. Try a larger distance.`)
                   : S.fix ? 'Choose a distance to see what\'s around you.' : 'Waiting for your location…'));
     return;
   }
 
-  const items = S.assets.map((a) => ({ a, ...liveDistance(a) })).sort((x, y) => x.d - y.d);
+  let items = S.assets.map((a) => ({ a, ...liveDistance(a) })).sort((x, y) => (x.d ?? Infinity) - (y.d ?? Infinity));
   const when = S.assetsAt ? ` · updated ${fmtTime(new Date(S.assetsAt))}` : '';
-  summary.textContent = `${items.length} asset${items.length === 1 ? '' : 's'} within ${fmtDist(S.radius)}${when}`;
+  const LIST_MAX = 100;   // Show all: list the nearest 100, the map shows everything
+  if (showingAll()) {
+    summary.textContent = `${items.length.toLocaleString()} assets in the network`
+      + (items.length > LIST_MAX ? ` · nearest ${LIST_MAX} listed, all on the Map` : '') + when;
+    items = items.slice(0, LIST_MAX);
+  } else {
+    summary.textContent = `${items.length} asset${items.length === 1 ? '' : 's'} within ${fmtDist(S.radius)}${when}`;
+  }
 
   for (const { a, d, dir } of items) {
     const key = `${a.layer}|${a.asset_id}`;
@@ -634,11 +671,17 @@ function renderList() {
 }
 
 // Update distances in place as the user walks (no rebuild, so taps aren't lost)
+let assetIndex = { list: null, map: new Map() };
+const assetByKey = (key) => {
+  if (assetIndex.list !== S.assets) assetIndex = { list: S.assets, map: new Map(S.assets.map((a) => [assetKey(a), a])) };
+  return assetIndex.map.get(key);
+};
+
 function updateDistances() {
   if (!S.assets.length || $('panel-list').hidden) return;
-  for (const a of S.assets) {
-    const span = document.querySelector(`.asset-dist[data-key="${CSS.escape(`${a.layer}|${a.asset_id}`)}"]`);
-    if (!span) continue;
+  for (const span of document.querySelectorAll('.asset-dist[data-key]')) {   // only the items in the list
+    const a = assetByKey(span.dataset.key);
+    if (!a) continue;
     const { d, dir } = liveDistance(a);
     span.firstChild.textContent = fmtDist(d);
     span.lastChild.textContent = dir || '';
@@ -838,6 +881,12 @@ function updateMapUser() {
   L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="you-marker"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }), keyboard: false, interactive: false }).addTo(g);
 }
 
+// Canvas point styles (used when there are lots of points) - same look as the normal markers
+const FAST_STYLE = {
+  idle:   { radius: 7, color: '#ffffff', weight: 2, fillColor: '#111418', fillOpacity: 1 },
+  recent: { radius: 7.5, color: '#22c55e', weight: 3, fillColor: '#111418', fillOpacity: 1 },
+};
+
 function renderMapAssets() {
   if (!S.map) return;
   const g = S.mapLayers.assets;
@@ -845,15 +894,21 @@ function renderMapAssets() {
   g.clearLayers();
   S.markers = {};
   const pts = [];
+  const fast = S.assets.length > (C.mapFastDrawOver || 400) && !!L.circleMarker && !!L.canvas;
+  if (fast) S.canvas ||= L.canvas({ padding: 0.5, tolerance: 6 });   // tolerance: easier to tap small points
   for (const a of S.assets) {
     if (a.lat == null) continue;
     const key = assetKey(a);
     const st = markerState(S.work[key]);
-    const html = `<div class="asset-marker ${st}"></div>`;
-    const m = L.marker([a.lat, a.lon], {
-      icon: L.divIcon({ className: 'asset-icon', html, iconSize: [22, 22], iconAnchor: [11, 11] }),
-      zIndexOffset: st === 'open' ? 1000 : 0,
-    }).bindPopup(() => buildPopup(a), { minWidth: 170, maxWidth: 240, autoPanPadding: [20, 20] }).addTo(g);
+    // Lots of points (e.g. Show all): draw them on a canvas, which stays fast with thousands.
+    // Open jobs always use the normal pulsing marker so they stand out.
+    const m = (fast && st !== 'open')
+      ? L.circleMarker([a.lat, a.lon], { renderer: S.canvas, ...FAST_STYLE[st] })
+      : L.marker([a.lat, a.lon], {
+        icon: L.divIcon({ className: 'asset-icon', html: `<div class="asset-marker ${st}"></div>`, iconSize: [22, 22], iconAnchor: [11, 11] }),
+        zIndexOffset: st === 'open' ? 1000 : 0,
+      });
+    m.bindPopup(() => buildPopup(a), { minWidth: 170, maxWidth: 240, autoPanPadding: [20, 20] }).addTo(g);
     m.on('popupopen', () => { S.popup = { a, m, why: logOnCheck(a).why || '' }; });
     m.on('popupclose', () => { if (S.popup?.m === m) S.popup = null; });
     S.markers[key] = m;
@@ -908,17 +963,14 @@ function selectTab(which) {
 
 // Map point style for an asset's latest job:
 //   open   - green (someone is logged on)
-//   recent - black with orange outline (closed in the last closed_visible_days days)
-//   issue  - black with red outline (a joint incident was logged on the latest job)
-//   both   - black with half orange / half red outline (recent and joint incident)
-//   idle   - black (no recent job)
+//   recent - black with green outline (closed in the last closed_visible_days days)
+//   idle   - black (closed, nothing recent)
 function markerState(w) {
   if (!w) return 'idle';
   if (w.status === 'Open') return 'open';
   const days = Number(SETTINGS.closed_visible_days) || 0;
   const recent = !!w.work_completed_at && Date.now() - new Date(w.work_completed_at).getTime() < days * 86400000;
-  const issue = w.asset_integrity_issue === 'Yes';
-  return recent && issue ? 'both' : issue ? 'issue' : recent ? 'recent' : 'idle';
+  return recent ? 'recent' : 'idle';
 }
 
 function workTag(w) {
@@ -952,7 +1004,7 @@ const workLine = (w) => (w ? workParts(w).join(' ') : '');
 async function refreshWorkStatus() {
   if (!S.assets.length) return;
   try {
-    const rows = await S.api.workStatus(S.assets.map((a) => ({ layer: a.layer, asset_id: a.asset_id })));
+    const rows = await S.api.workStatus(showingAll() ? null : S.assets.map((a) => ({ layer: a.layer, asset_id: a.asset_id })));
     S.work = {};
     for (const r of rows) S.work[`${r.asset_layer}|${r.asset_id}`] = r;
   } catch (e) {
