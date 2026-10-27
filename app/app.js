@@ -811,7 +811,7 @@ function addCreditsButton(map) {
 
 // ---- asset ID labels: only when zoomed in to street level, placed to avoid overlaps
 const LABEL_MIN_ZOOM = 17;
-const LABEL_FONT = '600 11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const LABEL_FONT = '700 11.5px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 let labelCtx = null;
 const labelWidth = (t) => {
   labelCtx ||= document.createElement('canvas').getContext('2d');

@@ -69,8 +69,11 @@
 .asset-label-icon { pointer-events: none; }
 .asset-label {
   display: block; padding: 0 3px; white-space: nowrap;
-  font: 600 11px/15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1b2224;
-  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 3px #fff;   /* white halo keeps it readable */
+  font: 700 11.5px/15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #000;
+  /* solid white outline (halo) so labels stand out from roads and map text */
+  -webkit-text-stroke: 3px #fff; paint-order: stroke fill;
+  text-shadow: 1px 1px 0 #fff, -1px 1px 0 #fff, 1px -1px 0 #fff, -1px -1px 0 #fff,
+               0 0 3px rgba(255,255,255,.9), 0 1px 4px rgba(0,0,0,.25);
 }
 
 /* ---- map credits: small (i) button instead of the full-width bar ---- */
