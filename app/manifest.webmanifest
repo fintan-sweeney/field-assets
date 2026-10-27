@@ -1,6 +1,6 @@
 {
-  "name": "FibreconX Field App",
-  "short_name": "FibreconX",
+  "name": "Enclosures Field App",
+  "short_name": "Enclosures",
   "description": "Find the assets nearest to you on site and log work against them.",
   "start_url": "./",
   "scope": "./",

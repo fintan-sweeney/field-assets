@@ -310,7 +310,7 @@ const S = {
 };
 
 // App name in the banner (older config.js files still say 'Field Assets')
-const APP_NAME = (!C.appName || C.appName === 'Field Assets') ? 'FibreconX Field App' : C.appName;
+const APP_NAME = (!C.appName || ['Field Assets', 'FibreconX Field App'].includes(C.appName)) ? 'Enclosures Field App' : C.appName;
 const CLOSED_DAYS = 2;   // recently-closed window; the database setting (app_settings closed_visible_days) wins
 // Log On distance etc. come from the database (app_settings in 06_work_logs.sql); these are fallbacks
 const SETTINGS = { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: CLOSED_DAYS, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 };

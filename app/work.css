@@ -104,7 +104,8 @@
 .popup .btn:disabled, .asset-work-actions .btn:disabled { opacity: .45; }
 .popup-note { margin-top: 2px; font-size: .78rem; font-weight: 600; color: #8a4b00; }
 .btn.danger-fill { background: var(--open); border-color: var(--open); color: #fff; }
-.btn.logon-btn { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.btn.logon-btn, #btn-logon-submit { background: #22c55e; border-color: #22c55e; color: #fff; font-weight: 800; }   /* same green as an Open point */
+#btn-logon-submit:disabled { opacity: .45; }
 .btn.small { min-height: 34px; padding: 0 10px; font-size: .85rem; border-radius: 9px; }
 
 /* ---- list: who opened / closed ---- */
@@ -269,3 +270,12 @@ textarea:focus { outline: none; border-color: var(--brand); }
 
 /* ---- pop-up messages (e.g. "we'll remind you again in 30 minutes"): centred text ---- */
 .toast { text-align: center; }
+
+/* ---- dark page background behind the cards and buttons (header, cards, banner, tabs and map unchanged) ---- */
+:root { --page-bg: #142022; --page-line: #2b3d3f; --page-text: #b9c7c5; }
+body { background: var(--page-bg); }
+.status-panel { background: var(--page-bg); border-bottom-color: var(--page-line); }
+.list-summary.muted, .list-summary, .asset-list .empty, .position { color: var(--page-text); }
+.position strong { color: #eef3f2; }
+.actions .btn.incident-btn { background: #fff; }                        /* Log Incident stays white with the red outline */
+.actions .btn.distance-btn { border: 2px solid #cfe3df; }               /* light outline so Distance stands out on the dark background */
