@@ -1,7 +1,7 @@
 # Field Assets
 
 A free, open-source mobile web app (PWA) for field staff and contractors. It shows the
-assets nearest to where you're standing and logs your location while tracking is on.
+assets nearest to where you're standing. Location is used only for the search and is never stored.
 Asset data comes from ArcGIS Enterprise; field users don't need ArcGIS licences.
 
 ```
@@ -55,20 +55,32 @@ position; sign in with any email and the code `123456`.
    - The **secret** key (or legacy *service_role* key) goes only in the sync script's
      config. It bypasses all security rules: never put it in the app or share it.
 
+### Sign-in method: password (pilot) or emailed code
+
+`loginMethod` in `app/config.js` chooses how people sign in:
+
+- **`'password'`** (default): you set each person's password in Supabase and give it to
+  them. **No emails are sent**, so steps 4 and 5 above (template and SMTP) can wait.
+  People can change their password in the app under Settings. To reset a forgotten
+  password, run `database/03_admin_set_password.sql`.
+- **`'code'`**: a 6-digit code is emailed each time someone signs in. Needs SMTP and the
+  template edit (steps 4 and 5). No passwords to manage, which suits contractors.
+
 ### Adding and removing people
 
 - **Add someone:** Authentication → Users → **Add user → Create new user**. Enter their
-  email, any long random password (they never use it), and tick *Auto confirm user*.
-  Then send them the app's web address. They sign in with an emailed code.
+  email and a password, and tick *Auto confirm user*. With password sign-in, give them
+  that password (by phone or SMS, separately from the app address). With code sign-in,
+  the password is never used, so make it long and random.
 - **Their details and access:** Table Editor → `profiles`. A row appears automatically
   for each user. You can set:
   - `full_name`, `company`
   - `role`: `admin`, `staff` or `contractor`. **Set yourself to `admin`** so you can see
-    everyone's location history.
+    the sync history.
   - `access_expires`: the last day a contractor can use the app
   - `active`: untick to cut someone off immediately
 - **Remove someone completely:** delete them under Authentication → Users. Their profile
-  and location history are deleted too.
+  is deleted too.
 
 ---
 
@@ -140,48 +152,98 @@ recorded in the `sync_runs` table.
 
 ## How it works for users
 
-- **Sign in** with their email and the 6-digit code they're emailed. They stay signed in.
-- **Near me** lists the closest assets with distance and direction, refreshing as they
-  move. Tap an asset for details, directions, or to see it on the map.
-- **Start tracking** records their position about every minute, or sooner if they move
-  25 m or more. The first time, they see a notice explaining what is recorded.
-- **No signal?** The app still opens and shows the last list. Location points are saved
-  on the phone and uploaded when signal returns.
+- **Sign in** with their email and password (or emailed code). They stay signed in.
+- **Find Assets Near Me** gets their current GPS position and lists the closest assets
+  with distance and direction. Distances update as they walk.
+- Tap an asset for its details, **Show on map**, directions, or to copy its ID.
+- **No signal?** The app still opens and shows the last list.
 
-**Important limitation:** a web app can only read the location **while it is open on
-screen**. If the phone is locked or they switch apps, logging pauses until they come
-back. The *Keep screen on while tracking* setting helps. If you need logging in the
-background all day, the next step is a native app (e.g. React Native with Expo) that
-uses this same database and sync unchanged.
-
----
-
-## Viewing location history
-
-- **Supabase:** Table Editor → `location_log_view` shows who, when, where and accuracy.
-  Filter and **Export to CSV**, then add the CSV to ArcGIS Pro as XY data.
-- **ArcGIS Pro directly:** Pro can connect to PostgreSQL databases. Use the connection
-  details from Supabase (Project Settings → Database), then check the supported
-  PostgreSQL versions for your ArcGIS Pro release.
-- Only users with role `admin` can read other people's locations. Everyone else can only
-  read their own.
+**Privacy:** the phone's location is sent to the database only to run the search. It
+isn't recorded or stored anywhere, and the app has no tracking feature.
 
 ---
 
 ## Before you roll it out
 
-- **Workplace surveillance and privacy.** In NSW, the *Workplace Surveillance Act 2005*
-  generally requires **written notice at least 14 days before** tracking employees,
-  covering what's tracked, how and when. Consider the *Privacy Act 1988* (collection
-  notice, retention, access) and include tracking in contractor agreements. Have HR or
-  legal review your approach. The in-app notice text is in `config.js`.
-- **Retention.** Decide how long to keep location history. The schema file ends with
-  an example clean-up query you can schedule.
+- **Privacy.** The app doesn't record or store anyone's location, so workplace
+  surveillance notices for tracking shouldn't be needed. Still tell users that the app
+  reads their location to find nearby assets. If an earlier test version recorded any
+  locations, `database/05_remove_location_logging.sql` deletes them.
 - **Plan.** Supabase's free tier is fine for a pilot. Free projects can be paused after
   a period of inactivity and don't include backups, so look at the Pro plan for
   production use (check current pricing and limits).
 - **Security checklist:** sign-ups off, SMTP configured, secret key only on the sync
   machine, yourself set to `admin`, contractors given `access_expires` dates.
+
+---
+
+## Log On / Log Off and Log Incident
+
+**Log On:** expand an asset in the list (or tap it on the map) → **Log On**. Enter at
+least one of **Circuit ID, Project ID or Fault ID**. You must be within **50 m** of the
+asset, with GPS accurate to ±100 m or better. The asset turns **red / OPEN**.
+
+**Log Off:** shown to the person who logged on. Enter a comment describing the work;
+photos aren't needed. The asset turns **amber / CLOSED** for 7 days, then back to
+**blue**.
+
+The list shows *Opened by … · time* or *Closed by … · time* under assets with recent jobs.
+
+**Log Incident** (button at the top of the main screen): choose a type, describe the
+fault or network issue, and optionally add photos. The person's GPS position is saved
+with the report. Incident types are set in `incidentTypes` in `config.js`.
+
+**Settings** (distance limit, GPS accuracy, days to show closed jobs) are in
+`app_settings()` at the top of `database/06_work_logs.sql`. Change them there and re-run
+the file; the app picks them up automatically.
+
+**Reports with dd/mm/yyyy dates:** Table Editor → `work_logs_report` and `incidents_report`
+(export to CSV from there). Dates are stored in Sydney time to the second.
+
+### Setup
+
+1. **Supabase:** run `database/06_work_logs.sql` in the SQL Editor (safe to re-run; it
+   upgrades earlier versions).
+2. **Worker details:** fill in `full_name`, `mobile_number` and `company` in `profiles`.
+3. **ArcGIS work log layer** (point layer). Suggested fields:
+
+   | Field | Type |
+   |---|---|
+   | field_worker_name, email_address, mobile_number, company | Text |
+   | circuit_id, project_id, fault_id | Text |
+   | status | Text (short) |
+   | work_started_at, work_completed_at | Date |
+   | closed_by | Text |
+   | work_comments | Text (e.g. length 1000) |
+   | duration_mins | **Double** |
+   | asset_id, asset_name, asset_layer, work_log_id | Text, *recommended* |
+
+   `sync/create_arcgis_layers.py` creates both layers with these fields in ArcGIS Pro.
+
+4. **ArcGIS incidents layer** (optional; point layer, attachments enabled):
+   `incident_type`, `incident_comments` (Text), `reported_at` (Date), `reporter_name`,
+   `email_address`, `mobile_number`, `company` (Text), `gps_accuracy_m` (Double),
+   `incident_id` (Text, recommended), plus `asset_id`, `asset_name`, `asset_layer`, `work_log_id`
+   (Text) for joint issues. Photos are attached with keyword `incident`.
+
+   **Log Joint Incident** (the warning button on a joint you're logged on to) creates an incident
+   with `incident_type` = "Joint issue", placed at the joint, linked to the joint and the job.
+
+   Fields missing from either layer are skipped. Share both layers with the sync service
+   account, with permission to add, update and add attachments.
+5. **config.json:** add the layer URLs, then test with `python work_log_push.py --dry-run`:
+   ```json
+   "work_logs": { "url": "https://<server>/server/rest/services/<folder>/WorkLogs/FeatureServer/0" },
+   "incidents": { "url": "https://<server>/server/rest/services/<folder>/Incidents/FeatureServer/0" }
+   ```
+6. **Schedule** `sync/run_push.bat` every 10 minutes (Task Scheduler) or `run_push.sh` (cron).
+7. **App:** upload `app.js`, `index.html`, `sw.js` and `work.css` to the `app` folder.
+
+If a push fails, the record waits in Supabase and is retried next run. The error is saved
+in `arcgis_error`.
+
+**Licensing:** check with your Esri account manager that one service account adding
+records collected by people without ArcGIS licences is allowed under your agreement.
 
 ---
 
