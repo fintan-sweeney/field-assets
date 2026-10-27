@@ -160,7 +160,8 @@ async function supabaseBackend() {
     },
     async logJointIncident(p) {
       const { data, error } = await sb.rpc('log_joint_incident', {
-        p_work_id: p.workId, p_comments: p.comments, p_photos: p.photos,
+        p_id: p.id, p_work_id: p.workId, p_comments: p.comments,
+        p_lat: p.lat, p_lon: p.lon, p_accuracy: p.accuracy, p_photos: p.photos,
       });
       if (error) throw error;
       return data;
@@ -266,15 +267,14 @@ function demoBackend() {
     async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 2, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 }; },
     async logJointIncident(p) {
       await new Promise((r) => setTimeout(r, 200));
-      const jobs = store.get('demo_jobs', {});
-      const job = Object.values(jobs).find((j) => j.work_id === p.workId);
+      const job = Object.values(store.get('demo_jobs', {})).find((j) => j.work_id === p.workId);
       if (!job || job.status !== 'Open') throw new Error('This job is closed. Log On again to report an incident on it.');
       if (!p.comments || !p.photos.length) throw new Error('Describe the incident and add a photo');
-      job.asset_integrity_issue = 'Yes';
-      job.integrity_issue_comments = [job.integrity_issue_comments, `${fmtWhen(new Date().toISOString())} - ${p.comments}`].filter(Boolean).join('\n');
-      store.set('demo_jobs', jobs);
-      console.info('[demo] joint incident', JSON.stringify({ work: p.workId, comments: p.comments, photos: p.photos.length }));
-      return { work_id: p.workId, asset_integrity_issue: 'Yes' };
+      const list = store.get('demo_incidents', []);
+      list.push({ id: p.id, incident_type: 'Joint issue', incident_comments: p.comments, asset_id: job.asset_id, work_log_id: p.workId, photos: p.photos.length });
+      store.set('demo_incidents', list);
+      console.info('[demo] joint issue', JSON.stringify(list[list.length - 1]));
+      return { incident_id: p.id, incident_type: 'Joint issue' };
     },
     async logIncident(p) {
       await new Promise((r) => setTimeout(r, 200));
@@ -1397,9 +1397,9 @@ function myOpenJob(a) {
     || (w?.status === 'Open' && w.is_mine ? w : null);
 }
 
-// ---- Log Joint Incident: an issue with the asset I'm logged on to.
-// Saved on that job's work log (asset_integrity_issue / integrity_issue_comments)
-// with photos in work_log_photos (tag 'integrity').
+// ---- Log Joint Incident: an issue with the joint I'm logged on to.
+// Saved in the incidents table as incident_type 'Joint issue', linked to the joint
+// and the job, with photos in incident_photos.
 
 let jointAsset = null;
 let jointPhotos = null;
@@ -1432,13 +1432,13 @@ async function submitJointIncident(e) {
   try {
     const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
     const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
-    const photos = await uploadPhotos(jointPhotos.list, job.work_id, `${a.name || a.asset_id}_integrity_${stamp}`, msg);
+    const id = newId();                                       // the new incidents record
+    const photos = await uploadPhotos(jointPhotos.list, id, `${a.name || a.asset_id}_Joint issue_${stamp}`, msg);
     msg('Saving…');
-    await S.api.logJointIncident({ workId: job.work_id, comments: $('in-joint-comment').value.trim(), photos });
-    job.asset_integrity_issue = 'Yes';                                   // so the point shows the red outline after Log Off
-    if (S.work[assetKey(a)]) S.work[assetKey(a)].asset_integrity_issue = 'Yes';
+    await S.api.logJointIncident({ id, workId: job.work_id, comments: $('in-joint-comment').value.trim(), photos,
+      lat: S.fix?.lat ?? null, lon: S.fix?.lon ?? null, accuracy: S.fix?.accuracy ?? null });
     $('dlg-joint').close();
-    toast('Joint incident saved to this job. Thank you.', 4000);
+    toast('Joint issue reported. Thank you.', 4000);
   } catch (err) {
     console.error(err);
     msg(friendlyError(err), true);
