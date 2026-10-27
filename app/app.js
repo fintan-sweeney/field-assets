@@ -627,7 +627,7 @@ function renderList() {
   if (!S.assets.length) {
     summary.textContent = '';
     list.append(el('li', { class: 'empty' },
-      S.lastQuery ? (showingAll() ? 'No assets in the network yet.' : `No assets within ${fmtDist(S.radius)}. Try a larger distance.`)
+      S.lastQuery ? (showingAll() ? 'No joints in the network yet.' : `No joints within ${fmtDist(S.radius)}. Try a larger distance.`)
                   : S.fix ? 'Choose a distance to see what\'s around you.' : 'Waiting for your location…'));
     return;
   }
@@ -636,11 +636,11 @@ function renderList() {
   const when = S.assetsAt ? ` · updated ${fmtTime(new Date(S.assetsAt))}` : '';
   const LIST_MAX = 100;   // Show all: list the nearest 100, the map shows everything
   if (showingAll()) {
-    summary.textContent = `${items.length.toLocaleString()} assets in the network`
+    summary.textContent = `${items.length.toLocaleString()} joints in the network`
       + (items.length > LIST_MAX ? ` · nearest ${LIST_MAX} listed, all on the Map` : '') + when;
     items = items.slice(0, LIST_MAX);
   } else {
-    summary.textContent = `${items.length} asset${items.length === 1 ? '' : 's'} within ${fmtDist(S.radius)}${when}`;
+    summary.textContent = `${items.length} joint${items.length === 1 ? '' : 's'} within ${fmtDist(S.radius)}${when}`;
   }
 
   for (const { a, d, dir } of items) {
