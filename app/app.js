@@ -1127,20 +1127,23 @@ function renderActiveJobs() {
     const a = jobAsset(j);
     const late = isOverdue(j);
     const away = isAway(j);
+    // Compact strip:  ● Pole 0296                [Show] [Log Off]
+    //                   Logged on since 14:20
+    const started = new Date(j.work_started_at);
+    const today = started.toDateString() === new Date().toDateString();
+    const since = today ? fmtWhen(j.work_started_at).split(' ')[0] : fmtWhen(j.work_started_at);
     box.append(el('div', { class: `active-job${late || away ? ' overdue' : ''}` },
-      el('span', { class: 'work-tag open' }, 'OPEN'),
+      el('span', { class: 'aj-dot', 'aria-hidden': 'true' }),
       el('div', { class: 'active-job-text' },
-        el('div', {}, `You're logged on to:`),
         el('strong', { class: 'active-job-asset' }, j.asset_name || j.asset_id),
-        el('div', {}, `since ${fmtWhen(j.work_started_at)}`)),
+        el('span', { class: 'aj-since' }, `Logged on since ${since}`)),
       el('div', { class: 'active-job-btns' },
-        a.lat != null ? el('button', { class: 'btn small', onclick: () => {
+        a.lat != null ? el('button', { class: 'btn small aj-show', onclick: () => {
           S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
           showOnMap(a);
         } }, 'Show') : null,
-        // Log Off (below Show) works from anywhere, even when the asset is no longer in the list or on the map
+        // Log Off works from anywhere, even when the asset is no longer in the list or on the map
         el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off')),
-      // Reminder across the full width of the banner, on one line
       away ? el('div', { class: 'overdue-note' }, `You've moved away - please Log Off`)
         : late ? el('div', { class: 'overdue-note' }, `Over ${SETTINGS.logon_overdue_hours || 4} hours - please Log Off`) : null));
   }
