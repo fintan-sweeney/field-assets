@@ -257,7 +257,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
 /* ---- logged-on banner: Log Off (works from anywhere) above Show ---- */
 
 /* ---- pop-up messages (e.g. "we'll remind you again in 30 minutes"): centred text ---- */
-.toast { text-align: center; }
+.toast { text-align: center; background: #fff; color: #000; border: 1px solid #cfd6d4; box-shadow: 0 4px 16px rgba(0,0,0,.35); }   /* white with black text */
 
 /* ---- dark page background behind the cards and buttons (header, cards, banner, tabs and map unchanged) ---- */
 :root { --page-bg: #142022; --page-line: #2b3d3f; --page-text: #b9c7c5; }
