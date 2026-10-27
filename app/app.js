@@ -663,8 +663,9 @@ function renderList() {
         ...Object.entries(a.attributes || {})];
       const dl = el('dl', {}, rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, fmtValue(v))]));
       li.append(el('div', { class: 'asset-body' }, dl,
-        el('div', { class: 'asset-work-actions' }, ...workButton(a),
-          el('button', { class: 'btn showmap-btn', onclick: () => showOnMap(a) }, 'Show on map'))));
+        el('div', { class: 'asset-work-actions' },     // Show on map on the left, Log On / Log Off on the right
+          el('button', { class: 'btn showmap-btn', onclick: () => showOnMap(a) }, 'Show on map'),
+          ...workButton(a))));
     }
     list.append(li);
   }
