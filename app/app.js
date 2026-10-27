@@ -651,16 +651,96 @@ async function copy(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Map (Leaflet + OpenStreetMap)
+// Map (Leaflet)
 // ---------------------------------------------------------------------------
+
+// Background maps. Pick one in config.js with  basemap: 'openfreemap' | 'carto-light' | 'esri-light-gray' | 'osm'
+//   openfreemap     - OpenFreeMap Positron: clean, sharp at every zoom, free, no account or key.
+//                     Vector map drawn by MapLibre (loaded only when needed).
+//   carto-light     - CARTO Positron: very clean, sharp at street level. Needs a free key:
+//                     carto.com/basemaps/apikey, then set  basemapKey: '...'  in config.js
+//   esri-light-gray - Esri Light Gray Canvas: clean, no key (covered by your ArcGIS licence);
+//                     tiles stop at zoom 16 and are enlarged beyond that
+//   osm             - standard OpenStreetMap (busier)
+// Default: openfreemap (carto-light if a basemapKey is set). If the chosen map can't load,
+// the app falls back to esri-light-gray, then osm, so the map is never blank.
+const ESRI = 'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas';
+const BASEMAPS = {
+  'carto-light': (key) => [{
+    url: `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png${key ? `?key=${encodeURIComponent(key)}` : ''}`,
+    opts: { subdomains: 'abcd', maxZoom: 20,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>' },
+  }],
+  'esri-light-gray': () => [
+    { url: `${ESRI}/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+      opts: { maxNativeZoom: 16, maxZoom: 20, attribution: 'Esri, HERE, Garmin, &copy; OpenStreetMap contributors' } },
+    { url: `${ESRI}/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,   // street names and place labels
+      opts: { maxNativeZoom: 16, maxZoom: 20 } },
+  ],
+  osm: () => [{ url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    opts: { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' } }],
+};
+
+const OPENFREEMAP = {
+  style: 'https://tiles.openfreemap.org/styles/positron',
+  attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> '
+    + '&copy; <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> '
+    + 'Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+  css: 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css',
+  js: ['https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js',
+       'https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.2/leaflet-maplibre-gl.js'],
+};
+const loadScript = (src) => new Promise((resolve, reject) => {
+  const el2 = document.createElement('script');
+  el2.src = src; el2.crossOrigin = 'anonymous'; el2.onload = resolve; el2.onerror = () => reject(new Error(`Could not load ${src}`));
+  document.head.append(el2);
+});
+const hasWebGL = () => {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
+};
+
+async function addOpenFreeMap(map) {
+  try {
+    if (!hasWebGL()) throw new Error('WebGL not available');
+    if (!document.querySelector(`link[href="${OPENFREEMAP.css}"]`)) {
+      document.head.append(el('link', { rel: 'stylesheet', href: OPENFREEMAP.css, crossorigin: 'anonymous' }));
+    }
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 15000));
+    if (!window.maplibregl) await Promise.race([loadScript(OPENFREEMAP.js[0]), timeout]);
+    if (!L.maplibreGL) await Promise.race([loadScript(OPENFREEMAP.js[1]), timeout]);
+    if (!L.maplibreGL) throw new Error('map library missing');
+    L.maplibreGL({ style: OPENFREEMAP.style, attribution: OPENFREEMAP.attribution, maxZoom: 20 }).addTo(map);
+  } catch (e) {
+    console.warn('OpenFreeMap could not load - using Esri Light Gray instead:', e.message);
+    addBasemap(map, 'esri-light-gray');
+  }
+}
+
+function addBasemap(map, forced) {
+  const name = forced || (BASEMAPS[C.basemap] || C.basemap === 'openfreemap' ? C.basemap
+    : (C.basemapKey ? 'carto-light' : 'openfreemap'));
+  if (name === 'openfreemap' && !C.basemapUrl) { addOpenFreeMap(map); return; }
+  const layers = (C.basemapUrl
+    ? [{ url: C.basemapUrl, opts: { maxZoom: 20, attribution: C.basemapAttribution || '' } }]
+    : BASEMAPS[name](C.basemapKey)).map((b) => L.tileLayer(b.url, b.opts).addTo(map));
+  // If the chosen background won't load (wrong key, blocked site), fall back to OpenStreetMap
+  if (name !== 'osm' && layers[0].on) {
+    let errors = 0, loaded = 0;
+    layers[0].on('tileload', () => { loaded++; });
+    layers[0].on('tileerror', () => {
+      if (++errors >= 6 && !loaded) {
+        layers.forEach((l) => map.removeLayer(l));
+        BASEMAPS.osm().forEach((b) => L.tileLayer(b.url, b.opts).addTo(map));
+        console.warn(`Basemap "${name}" failed to load - using OpenStreetMap instead`);
+      }
+    });
+  }
+}
 
 function ensureMap() {
   if (S.map || !window.L) return !!S.map;
   S.map = L.map('map', { zoomControl: true });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors',
-  }).addTo(S.map);
+  addBasemap(S.map);
   S.mapLayers = { assets: L.layerGroup().addTo(S.map), user: L.layerGroup().addTo(S.map) };
   const f = S.fix || (S.assets[0] && { lat: S.assets[0].lat, lon: S.assets[0].lon });
   S.map.setView(f ? [f.lat, f.lon] : [-25.3, 133.8], f ? 16 : 4);
