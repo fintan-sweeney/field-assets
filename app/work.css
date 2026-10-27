@@ -35,33 +35,63 @@
   border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .04em;
   vertical-align: middle;
 }
-.work-tag.open   { background: var(--open);   color: #fff; }
-.work-tag.closed { background: var(--closed); color: #fff; }
+.work-tag.open   { background: var(--pt-open, #22c55e);   color: #fff; }   /* same as the map points */
+.work-tag.closed { background: var(--pt-closed, #111418); color: #fff; }
 
-/* ---- map markers ---- */
+/* ---- map markers ----
+   open   green (logged on)              recent  black + orange outline (closed in the last 2 days)
+   idle   black                          issue   black + red outline (joint incident on latest job)
+                                         both    black + half orange / half red outline            */
+:root { --pt-open: #22c55e; --pt-closed: #111418; }
+.asset-icon { display: flex; align-items: center; justify-content: center; }
 .asset-marker {
-  position: relative;
+  position: relative; box-sizing: border-box; flex: none;
   width: 16px; height: 16px; border-radius: 50%;
-  background: var(--idle); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.45);
+  background: var(--pt-closed); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.45);
 }
-.asset-marker.closed { background: var(--closed); }
 .asset-marker.open {
-  width: 20px; height: 20px; margin: -2px 0 0 -2px;
-  background: var(--open); border-width: 3px;
-  box-shadow: 0 0 0 0 rgba(217, 45, 32, .6);
+  width: 20px; height: 20px;
+  background: var(--pt-open); border-width: 3px;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, .6);
   animation: open-pulse 1.8s ease-out infinite;
 }
-.asset-marker.open span {
-  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
-  padding: 1px 6px; border-radius: 6px;
-  background: var(--open); color: #fff; font: 800 11px/1.4 system-ui, sans-serif; letter-spacing: .05em;
-  white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.35);
+.asset-marker.recent, .asset-marker.issue {
+  width: 18px; height: 18px; border: 3px solid var(--closed);
+  box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,.45);
+}
+.asset-marker.issue { border-color: var(--open); }
+.asset-marker.both {
+  width: 18px; height: 18px; border: 0;
+  background: radial-gradient(circle closest-side, var(--pt-closed) 64%, transparent 66%),
+              conic-gradient(var(--closed) 0 50%, var(--open) 50% 100%);
+  box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,.45);
 }
 @keyframes open-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(217, 45, 32, .6); }
-  70%  { box-shadow: 0 0 0 14px rgba(217, 45, 32, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(217, 45, 32, 0); }
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); }
+  70%  { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
 }
+
+/* ---- asset ID labels (street-level zoom only) ---- */
+.asset-label-icon { pointer-events: none; }
+.asset-label {
+  display: block; padding: 0 3px; white-space: nowrap;
+  font: 600 11px/15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1b2224;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 3px #fff;   /* white halo keeps it readable */
+}
+
+/* ---- map credits: small (i) button instead of the full-width bar ---- */
+.map-credits { display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 6px; margin: 0 10px 10px 0 !important; }
+.map-credits-btn {
+  width: 22px; height: 22px; flex: none; padding: 0; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,.2); background: rgba(255,255,255,.9); color: #55605f;
+  font: italic 700 13px/20px Georgia, serif; cursor: pointer;
+}
+.map-credits-text {
+  max-width: 240px; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,.95);
+  box-shadow: 0 1px 4px rgba(0,0,0,.25); font-size: 11px; line-height: 1.4; color: #333;
+}
+.map-credits-text[hidden] { display: none; }
 
 /* ---- map popup (compact) ---- */
 .leaflet-popup-content { margin: 12px 16px; line-height: 1.3; }
@@ -88,8 +118,8 @@
 .asset-work { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .asset-work-who { text-align: left; overflow-wrap: anywhere; }
 .asset-work-when { text-align: right; white-space: nowrap; }
-.asset-work.open   { color: var(--open); }     /* same red as the OPEN tag */
-.asset-work.closed { color: var(--closed); }   /* same orange as the CLOSED tag */
+.asset-work.open   { color: #16a34a; }          /* green, like the OPEN tag (a shade darker to read on white) */
+.asset-work.closed { color: var(--pt-closed); } /* black, like the CLOSED tag */
 /* Expanded list item: Log On (or Log Off) and Show on map side by side, half width each */
 .asset-work-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 8px; }
 .asset-work-actions .btn { min-height: 52px; font-size: 1rem; margin: 0; padding: 0 8px; }
@@ -195,8 +225,9 @@ textarea:focus { outline: none; border-color: var(--brand); }
   background: transparent; color: #0e1a1b; font-size: 22px; line-height: 1; cursor: pointer;
 }
 .legend-close:active { background: #e8eceb; }
-.map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 14px; height: 14px; margin: 0; }
-.map-legend .legend-open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 16px; height: 16px; margin: 0; }
+.map-legend .asset-marker.open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
+.map-legend .asset-marker.recent, .map-legend .asset-marker.issue { border-width: 3px; }
 .map-legend .legend-you { border-width: 2px; box-shadow: 0 0 0 2px rgba(26, 115, 232, .4); }
 
 /* ---- Log On page: heading, asset, question and field labels centred ---- */

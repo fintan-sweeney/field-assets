@@ -134,15 +134,17 @@
       <!-- Map key: a small button that opens the key; × closes it -->
       <button id="btn-legend" class="legend-toggle" type="button" aria-label="Show map key" aria-expanded="false">
         <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-          <circle cx="6" cy="6.5" r="3" fill="#d92d20"/><rect x="11" y="5.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
-          <circle cx="6" cy="12" r="3" fill="#ff8c1a"/><rect x="11" y="10.7" width="10" height="2.6" rx="1.3" fill="#55605f"/>
-          <circle cx="6" cy="17.5" r="3" fill="#22c55e"/><rect x="11" y="16.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+          <circle cx="6" cy="6.5" r="3" fill="#22c55e"/><rect x="11" y="5.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+          <circle cx="6" cy="12" r="2.4" fill="#111418" stroke="#ff8c1a" stroke-width="1.6"/><rect x="11" y="10.7" width="10" height="2.6" rx="1.3" fill="#55605f"/>
+          <circle cx="6" cy="17.5" r="3" fill="#111418"/><rect x="11" y="16.2" width="10" height="2.6" rx="1.3" fill="#55605f"/>
         </svg>
       </button>
       <div id="map-legend" class="map-legend" role="dialog" aria-label="Map key" hidden>
         <button id="btn-legend-close" class="legend-close" type="button" aria-label="Close map key">&times;</button>
-        <div><span class="asset-marker open legend-open"></span>Open</div>
-        <div><span class="asset-marker closed"></span>Closed (recently open)</div>
+        <div><span class="asset-marker open"></span>Open</div>
+        <div><span class="asset-marker recent"></span>Closed (recently open)</div>
+        <div><span class="asset-marker both"></span>Closed (recently open &amp; joint issue)</div>
+        <div><span class="asset-marker issue"></span>Closed (joint issue)</div>
         <div><span class="asset-marker"></span>Closed</div>
         <div><span class="you-marker legend-you"></span>You</div>
       </div>

@@ -247,7 +247,7 @@ function demoBackend() {
       return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open')
         .map((j) => ({ ...j, work_id: j.work_id }));
     },
-    async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 7, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 }; },
+    async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 2, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 }; },
     async logJointIncident(p) {
       await new Promise((r) => setTimeout(r, 200));
       const jobs = store.get('demo_jobs', {});
@@ -295,7 +295,7 @@ const S = {
 
 // App name in the banner (older config.js files still say 'Field Assets')
 const APP_NAME = (!C.appName || C.appName === 'Field Assets') ? 'FibreconX Field App' : C.appName;
-const CLOSED_DAYS = Number.isFinite(C.showClosedForDays) ? C.showClosedForDays : 7;
+const CLOSED_DAYS = 2;   // recently-closed window; the database setting (app_settings closed_visible_days) wins
 // Log On distance etc. come from the database (app_settings in 06_work_logs.sql); these are fallbacks
 const SETTINGS = { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: CLOSED_DAYS, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 };
 const assetKey = (a) => `${a.layer}|${a.asset_id}`;
@@ -710,6 +710,7 @@ async function addOpenFreeMap(map) {
     if (!L.maplibreGL) await Promise.race([loadScript(OPENFREEMAP.js[1]), timeout]);
     if (!L.maplibreGL) throw new Error('map library missing');
     L.maplibreGL({ style: OPENFREEMAP.style, attribution: OPENFREEMAP.attribution, maxZoom: 20 }).addTo(map);
+    S.mapCredit = OPENFREEMAP.attribution;
   } catch (e) {
     console.warn('OpenFreeMap could not load - using Esri Light Gray instead:', e.message);
     addBasemap(map, 'esri-light-gray');
@@ -720,9 +721,11 @@ function addBasemap(map, forced) {
   const name = forced || (BASEMAPS[C.basemap] || C.basemap === 'openfreemap' ? C.basemap
     : (C.basemapKey ? 'carto-light' : 'openfreemap'));
   if (name === 'openfreemap' && !C.basemapUrl) { addOpenFreeMap(map); return; }
-  const layers = (C.basemapUrl
+  const defs = C.basemapUrl
     ? [{ url: C.basemapUrl, opts: { maxZoom: 20, attribution: C.basemapAttribution || '' } }]
-    : BASEMAPS[name](C.basemapKey)).map((b) => L.tileLayer(b.url, b.opts).addTo(map));
+    : BASEMAPS[name](C.basemapKey);
+  S.mapCredit = defs[0].opts.attribution || '';
+  const layers = defs.map((b) => L.tileLayer(b.url, b.opts).addTo(map));
   // If the chosen background won't load (wrong key, blocked site), fall back to OpenStreetMap
   if (name !== 'osm' && layers[0].on) {
     let errors = 0, loaded = 0;
@@ -731,17 +734,94 @@ function addBasemap(map, forced) {
       if (++errors >= 6 && !loaded) {
         layers.forEach((l) => map.removeLayer(l));
         BASEMAPS.osm().forEach((b) => L.tileLayer(b.url, b.opts).addTo(map));
+        S.mapCredit = BASEMAPS.osm()[0].opts.attribution;
         console.warn(`Basemap "${name}" failed to load - using OpenStreetMap instead`);
       }
     });
   }
 }
 
+// Map credits: OpenStreetMap's licence needs a visible credit, so instead of the
+// full-width bar there's a small (i) button in the corner that shows it when tapped.
+function addCreditsButton(map) {
+  if (!L.Control?.extend) return;
+  const Credits = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd() {
+      const box = L.DomUtil.create('div', 'map-credits');
+      const btn = L.DomUtil.create('button', 'map-credits-btn', box);
+      const txt = L.DomUtil.create('div', 'map-credits-text', box);
+      btn.type = 'button'; btn.textContent = 'i';
+      btn.setAttribute('aria-label', 'Map credits'); btn.setAttribute('aria-expanded', 'false');
+      txt.hidden = true;
+      btn.addEventListener('click', () => {
+        txt.innerHTML = `${S.mapCredit || ''} | <a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>`;
+        txt.hidden = !txt.hidden;
+        btn.setAttribute('aria-expanded', String(!txt.hidden));
+      });
+      L.DomEvent.disableClickPropagation(box);
+      return box;
+    },
+  });
+  new Credits().addTo(map);
+}
+
+// ---- asset ID labels: only when zoomed in to street level, placed to avoid overlaps
+const LABEL_MIN_ZOOM = 18;
+const LABEL_FONT = '600 11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+let labelCtx = null;
+const labelWidth = (t) => {
+  labelCtx ||= document.createElement('canvas').getContext('2d');
+  labelCtx.font = LABEL_FONT;
+  return Math.ceil(labelCtx.measureText(t).width) + 6;
+};
+const escHtml = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function renderLabels() {
+  const g = S.mapLayers?.labels;
+  if (!g || !S.map?.getZoom || !S.map.latLngToContainerPoint) return;
+  g.clearLayers();
+  if (S.map.getZoom() < LABEL_MIN_ZOOM) return;
+  const view = S.map.getBounds().pad(0.15);
+  const pts = S.assets.filter((a) => a.lat != null && view.contains([a.lat, a.lon]))
+    .map((a) => ({ a, p: S.map.latLngToContainerPoint([a.lat, a.lon]) }));
+  // Things a label must not cover: every point (and the blue "You" dot)
+  const R = 10, H = 15;
+  const blocked = pts.map(({ p }) => ({ x1: p.x - R, y1: p.y - R, x2: p.x + R, y2: p.y + R }));
+  if (S.fix) { const u = S.map.latLngToContainerPoint([S.fix.lat, S.fix.lon]); blocked.push({ x1: u.x - 11, y1: u.y - 11, x2: u.x + 11, y2: u.y + 11 }); }
+  const hit = (b) => blocked.some((o) => b.x1 < o.x2 && b.x2 > o.x1 && b.y1 < o.y2 && b.y2 > o.y1);
+  // Open jobs get first pick of the best spots, then nearest-to-centre first
+  const c = S.map.getSize ? S.map.getSize().divideBy(2) : { x: 0, y: 0 };
+  pts.sort((x, y) => (S.work[assetKey(y.a)]?.status === 'Open') - (S.work[assetKey(x.a)]?.status === 'Open')
+    || (Math.hypot(x.p.x - c.x, x.p.y - c.y) - Math.hypot(y.p.x - c.x, y.p.y - c.y)));
+  for (const { a, p } of pts) {
+    const text = a.asset_id;
+    if (!text) continue;
+    const w = labelWidth(text);
+    // Try right, left, above, below, then the diagonals
+    const spots = [[R + 2, -H / 2], [-R - 2 - w, -H / 2], [-w / 2, -R - 2 - H], [-w / 2, R + 2],
+      [R - 2, -R - H + 2], [R - 2, R - 2], [-R + 2 - w, -R - H + 2], [-R + 2 - w, R - 2]];
+    for (const [dx, dy] of spots) {
+      const b = { x1: p.x + dx, y1: p.y + dy, x2: p.x + dx + w, y2: p.y + dy + H };
+      if (hit(b)) continue;
+      blocked.push(b);
+      L.marker([a.lat, a.lon], {
+        icon: L.divIcon({ className: 'asset-label-icon', html: `<span class="asset-label">${escHtml(text)}</span>`,
+          iconSize: [w, H], iconAnchor: [-dx, -dy] }),
+        interactive: false, keyboard: false, zIndexOffset: -500,
+      }).addTo(g);
+      break;
+    }
+  }
+}
+
 function ensureMap() {
   if (S.map || !window.L) return !!S.map;
-  S.map = L.map('map', { zoomControl: true });
+  S.map = L.map('map', { zoomControl: true, attributionControl: false });   // credits are behind the small (i) button
   addBasemap(S.map);
-  S.mapLayers = { assets: L.layerGroup().addTo(S.map), user: L.layerGroup().addTo(S.map) };
+  addCreditsButton(S.map);
+  S.mapLayers = { assets: L.layerGroup().addTo(S.map), labels: L.layerGroup().addTo(S.map), user: L.layerGroup().addTo(S.map) };
+  S.map.on?.('zoomend moveend', renderLabels);
   const f = S.fix || (S.assets[0] && { lat: S.assets[0].lat, lon: S.assets[0].lon });
   S.map.setView(f ? [f.lat, f.lon] : [-25.3, 133.8], f ? 16 : 4);
   renderMapAssets();
@@ -768,11 +848,10 @@ function renderMapAssets() {
   for (const a of S.assets) {
     if (a.lat == null) continue;
     const key = assetKey(a);
-    const st = (S.work[key]?.status || '').toLowerCase();
-    const html = st === 'open' ? '<div class="asset-marker open"></div>'
-      : st === 'closed' ? '<div class="asset-marker closed"></div>' : '<div class="asset-marker"></div>';
+    const st = markerState(S.work[key]);
+    const html = `<div class="asset-marker ${st}"></div>`;
     const m = L.marker([a.lat, a.lon], {
-      icon: L.divIcon({ className: '', html, iconSize: [18, 18], iconAnchor: [9, 9] }),
+      icon: L.divIcon({ className: 'asset-icon', html, iconSize: [22, 22], iconAnchor: [11, 11] }),
       zIndexOffset: st === 'open' ? 1000 : 0,
     }).bindPopup(() => buildPopup(a), { minWidth: 170, maxWidth: 240, autoPanPadding: [20, 20] }).addTo(g);
     m.on('popupopen', () => { S.popup = { a, m, why: logOnCheck(a).why || '' }; });
@@ -786,6 +865,7 @@ function renderMapAssets() {
     S.mapFitted = true;
   }
   if (reopenKey && S.markers[reopenKey] && !$('panel-map').hidden) S.markers[reopenKey].openPopup();
+  renderLabels();
 }
 
 function showOnMap(a) {
@@ -825,6 +905,21 @@ function selectTab(which) {
 // ---------------------------------------------------------------------------
 // Work logs (Log On / Log Off) and incidents
 // ---------------------------------------------------------------------------
+
+// Map point style for an asset's latest job:
+//   open   - green (someone is logged on)
+//   recent - black with orange outline (closed in the last closed_visible_days days)
+//   issue  - black with red outline (a joint incident was logged on the latest job)
+//   both   - black with half orange / half red outline (recent and joint incident)
+//   idle   - black (no recent job)
+function markerState(w) {
+  if (!w) return 'idle';
+  if (w.status === 'Open') return 'open';
+  const days = Number(SETTINGS.closed_visible_days) || 0;
+  const recent = !!w.work_completed_at && Date.now() - new Date(w.work_completed_at).getTime() < days * 86400000;
+  const issue = w.asset_integrity_issue === 'Yes';
+  return recent && issue ? 'both' : issue ? 'issue' : recent ? 'recent' : 'idle';
+}
 
 function workTag(w) {
   if (!w) return null;
@@ -1284,6 +1379,8 @@ async function submitJointIncident(e) {
     const photos = await uploadPhotos(jointPhotos.list, job.work_id, `${a.name || a.asset_id}_integrity_${stamp}`, msg);
     msg('Saving…');
     await S.api.logJointIncident({ workId: job.work_id, comments: $('in-joint-comment').value.trim(), photos });
+    job.asset_integrity_issue = 'Yes';                                   // so the point shows the red outline after Log Off
+    if (S.work[assetKey(a)]) S.work[assetKey(a)].asset_integrity_issue = 'Yes';
     $('dlg-joint').close();
     toast('Joint incident saved to this job. Thank you.', 4000);
   } catch (err) {
