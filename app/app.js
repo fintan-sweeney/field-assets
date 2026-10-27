@@ -767,7 +767,7 @@ function addCreditsButton(map) {
 }
 
 // ---- asset ID labels: only when zoomed in to street level, placed to avoid overlaps
-const LABEL_MIN_ZOOM = 18;
+const LABEL_MIN_ZOOM = 17;
 const LABEL_FONT = '600 11px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 let labelCtx = null;
 const labelWidth = (t) => {
