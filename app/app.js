@@ -656,7 +656,7 @@ function renderList() {
         el('span', { class: 'asset-work-who' }, `By ${workUser(S.work[key])}`),
         el('span', { class: 'asset-work-when' }, `@ ${fmtWhen(S.work[key].status === 'Open' ? S.work[key].work_started_at : S.work[key].work_completed_at)}`)) : null,
     );
-    const li = el('li', { class: 'asset' }, head);
+    const li = el('li', { class: `asset${S.work[key]?.status === 'Open' ? ' job-open' : ''}` }, head);   // green outline when a job is open
 
     if (open) {
       const rows = [['Asset ID', a.asset_id], ['Layer', a.layer], ['Type', a.asset_type], ['Status', a.status],
@@ -1133,12 +1133,12 @@ function renderActiveJobs() {
         el('strong', { class: 'active-job-asset' }, j.asset_name || j.asset_id),
         el('div', {}, `since ${fmtWhen(j.work_started_at)}`)),
       el('div', { class: 'active-job-btns' },
-        // Log Off works from anywhere, even when the asset is no longer in the list or on the map
-        el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off'),
         a.lat != null ? el('button', { class: 'btn small', onclick: () => {
           S.work[assetKey(a)] ||= { status: 'Open', is_mine: true, work_id: j.work_id, work_started_at: j.work_started_at };
           showOnMap(a);
-        } }, 'Show') : null),
+        } }, 'Show') : null,
+        // Log Off (below Show) works from anywhere, even when the asset is no longer in the list or on the map
+        el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off')),
       // Reminder across the full width of the banner, on one line
       away ? el('div', { class: 'overdue-note' }, `You've moved away - please Log Off`)
         : late ? el('div', { class: 'overdue-note' }, `Over ${SETTINGS.logon_overdue_hours || 4} hours - please Log Off`) : null));

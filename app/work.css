@@ -103,7 +103,7 @@
 }
 .popup .btn:disabled, .asset-work-actions .btn:disabled { opacity: .45; }
 .popup-note { margin-top: 2px; font-size: .78rem; font-weight: 600; color: #8a4b00; }
-.btn.danger-fill { background: var(--open); border-color: var(--open); color: #fff; }
+.btn.danger-fill { background: var(--open); border-color: var(--open); color: #fff; }   /* Log Off buttons: red */
 .btn.logon-btn, #btn-logon-submit { background: #22c55e; border-color: #22c55e; color: #fff; font-weight: 800; }   /* same green as an Open point */
 #btn-logon-submit:disabled { opacity: .45; }
 .btn.small { min-height: 34px; padding: 0 10px; font-size: .85rem; border-radius: 9px; }
@@ -146,7 +146,7 @@
 .active-job {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 10px; border-radius: 12px;
-  background: var(--open-bg); border: 1px solid var(--open);
+  background: #dcfce7; border: 1px solid #22c55e;   /* green: you're logged on */
 }
 .active-job .work-tag { margin-left: 0; flex: none; }
 .active-job-text { flex: 1; font-size: .92rem; }
@@ -279,3 +279,6 @@ body { background: var(--page-bg); }
 .position strong { color: #eef3f2; }
 .actions .btn.incident-btn { background: #fff; }                        /* Log Incident stays white with the red outline */
 .actions .btn.distance-btn { border: 2px solid #cfe3df; }               /* light outline so Distance stands out on the dark background */
+
+/* ---- list: a job is open on this joint - slight green outline ---- */
+.asset.job-open { border-color: #22c55e; box-shadow: 0 0 0 1px #22c55e; }
