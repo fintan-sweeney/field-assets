@@ -148,6 +148,10 @@ async function supabaseBackend() {
       if (error) throw error;
       return data || [];
     },
+    async setAway(workId, away) {
+      const { error } = await sb.rpc('set_job_away', { p_work_id: workId, p_away: away });
+      if (error) throw error;
+    },
     async myOpenWork() {
       const { data, error } = await sb.rpc('my_open_work');
       if (error) throw error;
@@ -259,6 +263,11 @@ function demoBackend() {
       const jobs = store.get('demo_jobs', {});
       if (!keys) return Object.values(jobs);
       return keys.map((k) => jobs[`${k.layer}|${k.asset_id}`]).filter(Boolean);
+    },
+    async setAway(workId, away) {
+      const jobs = store.get('demo_jobs', {});
+      const j = Object.values(jobs).find((x) => x.work_id === workId);
+      if (j) { j.away = away; store.set('demo_jobs', jobs); }
     },
     async myOpenWork() {
       return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open')
@@ -656,7 +665,7 @@ function renderList() {
         el('span', { class: 'asset-work-who' }, `By ${workUser(S.work[key])}`),
         el('span', { class: 'asset-work-when' }, `@ ${fmtWhen(S.work[key].status === 'Open' ? S.work[key].work_started_at : S.work[key].work_completed_at)}`)) : null,
     );
-    const li = el('li', { class: `asset${S.work[key]?.status === 'Open' ? ' job-open' : ''}` }, head);   // green outline when a job is open
+    const li = el('li', { class: `asset${S.work[key]?.status === 'Open' ? ' job-open' : ''}${jobAlert(key) ? ' job-alert' : ''}`, 'data-key': key }, head);   // green outline when open, red when a reminder is due
 
     if (open) {
       const rows = [['Asset ID', a.asset_id], ['Layer', a.layer], ['Type', a.asset_type], ['Status', a.status],
@@ -1078,9 +1087,8 @@ function checkOverdue() {
   reminder = { job, reason };
   $('overdue-asset').textContent = job.asset_name || job.asset_id;
   if (reason === 'away') {
-    $('overdue-title').textContent = 'Have you left this asset?';
-    $('overdue-text').textContent =
-      `You're about ${fmtDist(awayDistance(job))} from this asset and still logged on to it. If you've finished, please Log Off now.`;
+    $('overdue-title').textContent = 'Are you finished?';
+    $('overdue-text').textContent = `You're about ${fmtDist(awayDistance(job))} away.`;
   } else {
     $('overdue-title').textContent = 'Still working here?';
     $('overdue-text').textContent =
@@ -1092,8 +1100,20 @@ function checkOverdue() {
 
 // Called on every GPS update: redraw the banner when "moved away" changes, and remind once
 let lastAwayKey = '';
+const awaySent = {};   // work_id -> last yes/no we told the database
+function shareAway() {
+  for (const j of S.myOpen || []) {
+    const d = awayDistance(j);
+    if (d === null) continue;                        // GPS not good enough to say either way
+    const away = d > awayLimit();
+    if (awaySent[j.work_id] === away) continue;
+    awaySent[j.work_id] = away;
+    S.api?.setAway?.(j.work_id, away).catch(() => { delete awaySent[j.work_id]; });   // retry next time
+  }
+}
 function checkAway() {
   if (!S.myOpen?.length) return;
+  shareAway();
   const key = S.myOpen.map((j) => (isAway(j) ? j.work_id : '')).join(',');
   if (key === lastAwayKey) return;
   lastAwayKey = key;
@@ -1119,7 +1139,19 @@ function wireOverdue() {
 }
 
 // Banner under the main buttons: "You're logged on to Joint 0001 since 9:14"
+// Red outline on a list item (everyone sees it):
+//   an open job that has gone past the time limit, or
+//   an open job whose person has moved away (their phone shares a yes/no flag - never a location)
+function jobAlert(key) {
+  const w = S.work[key];
+  if (w?.status === 'Open' && ((w.work_started_at && isOverdue(w)) || w.away)) return true;   // w.away: yes/no only, no location
+  const mine = S.myOpen?.find((x) => `${x.asset_layer}|${x.asset_id}` === key);
+  return !!mine && (isOverdue(mine) || isAway(mine));
+}
+
 function renderActiveJobs() {
+  // keep the red outline on the matching list item in step with the strip
+  document.querySelectorAll('.asset[data-key]').forEach((li) => li.classList.toggle('job-alert', jobAlert(li.dataset.key)));
   const box = $('active-jobs');
   box.innerHTML = '';
   box.hidden = !S.myOpen.length;

@@ -165,7 +165,7 @@
       </div>
       <button value="close" class="btn primary">Done</button>
       <button type="button" id="btn-signout" class="btn danger">Sign out</button>
-      <p class="tiny muted">Your location is used only to find nearby assets. It isn't recorded or stored.</p>
+      <p class="tiny muted">Your location is used only to find nearby joints and check you're at the joint. It isn't recorded or stored. If you move away from a joint you're logged on to, colleagues just see that joint outlined in red.</p>
     </form>
   </dialog>
 
@@ -246,8 +246,10 @@
       <p id="overdue-asset" class="work-asset"></p>
       <p id="overdue-title" class="overdue-title">Still working here?</p>
       <p id="overdue-text" class="overdue-text"></p>
-      <button type="button" id="btn-overdue-logoff" class="btn danger-fill">Log Off now</button>
-      <button type="button" id="btn-overdue-snooze" class="btn">Still working</button>
+      <div class="overdue-btns">
+        <button type="button" id="btn-overdue-snooze" class="btn">Still working</button>
+        <button type="button" id="btn-overdue-logoff" class="btn danger-fill">Log Off now</button>
+      </div>
     </div>
   </dialog>
 
