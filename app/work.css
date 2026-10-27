@@ -126,7 +126,10 @@
 /* ---- Log Incident button ---- */
 .incident-btn { background: transparent; color: var(--open); border-color: var(--open); }
 .actions .btn { padding: 0 12px; font-size: 1.08rem; gap: 6px; white-space: nowrap; }
-.tabs .tab { font-size: .95rem; }   /* List / Map: a little smaller than Distance / Log Incident */
+/* List / Map: slim and discreet, so Distance and Log Incident stand out */
+.tabs { padding: 3px; gap: 3px; background: rgba(255,255,255,.06); border: 1px solid var(--page-line, #2b3d3f); border-radius: 10px; }
+.tabs .tab { min-height: 32px; font-size: .85rem; font-weight: 600; color: #9fb0ae; border-radius: 7px; }
+.tabs .tab.active { background: rgba(255,255,255,.14); color: #fff; box-shadow: none; }
 @media (max-width: 400px) { .incident-btn svg { display: none; } }
 
 /* ---- Distance dropdown (styled like the old Find Assets button) ---- */
@@ -269,7 +272,7 @@ body { background: var(--page-bg); }
 .asset.job-open { border-color: #22c55e; box-shadow: 0 0 0 1px #22c55e; }
 
 /* ---- "logged on" strip: compact, one row ---- */
-.active-jobs { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.active-jobs { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }   /* top of the panel, above Distance / Log Incident */
 .active-job {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
   padding: 7px 8px 7px 12px; border-radius: 12px;
@@ -290,5 +293,16 @@ body { background: var(--page-bg); }
 .active-job-btns { flex: none; display: flex; gap: 6px; }
 .active-job-btns .btn { min-height: 32px; padding: 0 12px; font-size: .85rem; font-weight: 700; border-radius: 8px; }
 .active-job-btns .aj-show { background: #fff; border: 1px solid #b7dcc6; color: #14532d; }
-.active-job.overdue { border-color: var(--open); }
-.overdue-note { flex: 1 0 100%; padding-left: 20px; font-size: .78rem; font-weight: 800; color: var(--open); }
+.active-job.overdue { border-color: var(--open); box-shadow: 0 0 0 1px var(--open); }   /* red outline: over 4 hours or moved away */
+
+/* ---- list items: tighter, cleaner ---- */
+.asset-list { gap: 4px; }
+.asset { border-radius: 10px; }
+.asset-head { padding: 6px 11px; min-height: 40px; gap: 1px 10px; }      /* compact, still tappable */
+.asset-head .asset-name { font-size: 1rem; line-height: 1.2; }
+.asset-status .work-tag { font-size: .72rem; padding: 1px 8px; }
+.asset-work { font-size: .8rem; }
+.asset-body { padding: 0 11px 8px; }
+.asset-body dl { margin: 6px 0 8px; gap: 1px 12px; font-size: .85rem; line-height: 1.3; }
+.asset-work-actions { gap: 6px; margin: 0; }
+.asset-work-actions .btn { min-height: 40px; font-size: .92rem; border-radius: 9px; }

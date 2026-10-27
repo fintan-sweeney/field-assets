@@ -1143,9 +1143,8 @@ function renderActiveJobs() {
           showOnMap(a);
         } }, 'Show') : null,
         // Log Off works from anywhere, even when the asset is no longer in the list or on the map
-        el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off')),
-      away ? el('div', { class: 'overdue-note' }, `You've moved away - please Log Off`)
-        : late ? el('div', { class: 'overdue-note' }, `Over ${SETTINGS.logon_overdue_hours || 4} hours - please Log Off`) : null));
+        el('button', { class: 'btn small danger-fill', onclick: () => openLogOff(a) }, 'Log Off'))));
+    // Over the time limit or moved away: just a red outline here (the pop-up reminder has the details)
   }
 }
 
