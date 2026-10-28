@@ -335,7 +335,7 @@ function demoBackend() {
       console.info('[demo] incident', JSON.stringify({ type: p.type, comments: p.comments, photos: p.photos.length }));
       const list = store.get('demo_general_incidents', []);
       list.push({ id: p.id, incident_type: p.type, incident_comments: p.comments, reported_at: new Date().toISOString(),
-        reporter_name: 'Demo User', lat: p.lat, lon: p.lon });
+        reporter_name: 'Demo User', lat: p.lat, lon: p.lon, arcgis_objectid: 100 + list.length });
       store.set('demo_general_incidents', list);
       return { incident_id: p.id };
     },
@@ -1043,7 +1043,8 @@ function renderMapIncidents() {
       icon: L.divIcon({ className: 'incident-icon', html: INCIDENT_SVG, iconSize: [26, 26], iconAnchor: [13, 15] }),
       zIndexOffset: 1500,
     }).bindPopup(() => el('div', { class: 'popup incident-popup' },
-      el('div', { class: 'popup-title' }, el('strong', {}, i.incident_type || 'Incident')),
+      el('div', { class: 'popup-title' }, el('strong', {},
+        `${i.incident_type || 'Incident'} (${i.arcgis_objectid ?? 'pending'})`)),   // ArcGIS OBJECTID, or pending until synced
       i.incident_comments ? el('div', { class: 'incident-text' }, i.incident_comments) : null,
       el('div', { class: 'incident-when' }, `${i.reporter_name ? `${i.reporter_name} · ` : ''}${fmtWhen(i.reported_at)}`)),
     { minWidth: 170, maxWidth: 240 }).addTo(g);
