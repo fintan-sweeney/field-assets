@@ -55,10 +55,11 @@
   box-shadow: 0 0 0 0 rgba(34, 197, 94, .6);
   animation: open-pulse 1.8s ease-out infinite;
 }
-.asset-marker.recent {
+.asset-marker.recent, .asset-marker.issue {
   width: 18px; height: 18px; border: 3px solid var(--pt-open);
   box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,.45);
 }
+.asset-marker.issue { border-color: var(--open); }   /* joint issue: black with red outline */
 @keyframes open-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); }
   70%  { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
@@ -219,7 +220,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
 .legend-close:active { background: #e8eceb; }
 .map-legend .asset-marker, .map-legend .you-marker { flex: none; width: 16px; height: 16px; margin: 0; }
 .map-legend .asset-marker.open { animation: none; border-width: 2px; box-shadow: 0 1px 3px rgba(0, 0, 0, .45); }
-.map-legend .asset-marker.recent { border-width: 3px; }
+.map-legend .asset-marker.recent, .map-legend .asset-marker.issue { border-width: 3px; }
 .map-legend .legend-you { border-width: 2px; box-shadow: 0 0 0 2px rgba(26, 115, 232, .4); }
 
 /* ---- Log On page: heading, asset, question and field labels centred ---- */
@@ -349,3 +350,32 @@ body { background: var(--page-bg); }
 /* header logo a little smaller */
 .topbar-logo { height: 32px; }
 @media (max-width: 360px) { .topbar-logo { height: 28px; } }
+
+/* ---- general incidents on the map: red triangle with a white ! ---- */
+.incident-icon { filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.legend-incident { flex: none; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.incident-popup { align-items: stretch; gap: 4px; }
+.incident-popup .popup-title { color: var(--open); }
+.incident-when { text-align: center; font-size: .8rem; color: #55605f; }
+.incident-text { font-size: .88rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow-y: auto; }
+
+/* joint: closed recently AND joint issue - black with half green / half red outline */
+.asset-marker.both {
+  width: 18px; height: 18px; border: 0;
+  background: radial-gradient(circle closest-side, var(--pt-closed) 64%, transparent 66%),
+              conic-gradient(var(--pt-open) 0 50%, var(--open) 50% 100%);
+  box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0,0,0,.45);
+}
+.map-legend .asset-marker.both { width: 16px; height: 16px; }
+
+/* Log Off from a reminder: Logged on (left) and Log off time (right) */
+.logoff-times { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-bottom: 4px; }
+.logoff-times[hidden] { display: none; }
+.logoff-time-box { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 8px 8px; border: 1px solid var(--border); border-radius: 10px; background: #f6f8f7; }
+.logoff-time-label { font-size: .78rem; font-weight: 700; color: #55605f; margin: 0; }
+.logoff-time-value { font-size: .95rem; font-weight: 700; color: #0e1a1b; min-height: 38px; display: flex; align-items: center; }
+.logoff-time-box input {
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; min-height: 38px; padding: 4px 6px; font: inherit; font-size: .9rem; font-weight: 700; color: #0e1a1b;
+  border: 2px solid #22c55e; border-radius: 8px; background: #fff;
+}
+#in-logoff-date { min-height: 32px; font-size: .8rem; font-weight: 600; border-width: 1px; border-color: #b7dcc6; }

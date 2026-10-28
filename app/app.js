@@ -128,9 +128,23 @@ async function supabaseBackend() {
       return data;
     },
     async logOff(p) {
-      const { data, error } = await sb.rpc('log_off', { p_work_id: p.workId, p_comments: p.comments });
+      const args = { p_work_id: p.workId, p_comments: p.comments };
+      if (p.completedAt) args.p_completed_at = p.completedAt;     // chosen finish time (Log Off from a reminder)
+      const { data, error } = await sb.rpc('log_off', args);
       if (error) throw error;
       return data;
+    },
+    // Joints with a recent joint issue (read-only). keys null = whole network
+    async jointIssues(keys, days) {
+      const { data, error } = await sb.rpc('asset_joint_issues', { p_assets: keys, p_days: days });
+      if (error) throw error;
+      return data || [];
+    },
+    // General incidents for the map (read-only). radius null = anywhere
+    async mapIncidents(lat, lon, radius, days) {
+      const { data, error } = await sb.rpc('map_incidents', { p_lat: lat, p_lon: lon, p_radius_m: radius, p_days: days });
+      if (error) throw error;
+      return data || [];
     },
     // Search by asset ID or name anywhere in the network
     async searchAssets(q, limit = 10) {
@@ -254,8 +268,10 @@ function demoBackend() {
       const jobs = store.get('demo_jobs', {});
       const job = Object.values(jobs).find((j) => j.work_id === p.workId);
       if (!job || job.status !== 'Open') throw new Error('Job not found or already closed');
-      const done = new Date();
+      const done = p.completedAt ? new Date(p.completedAt) : new Date();
       if (!p.comments) throw new Error('Enter a comment describing the work carried out');
+      if (done > new Date(Date.now() + 120000)) throw new Error("The Log Off time can't be in the future");
+      if (done < new Date(job.work_started_at)) throw new Error('The Log Off time must be after you logged on');
       job.status = 'Closed'; job.work_completed_at = done.toISOString(); job.closed_by_name = 'Demo User';
       job.duration_mins = Math.round((done - new Date(job.work_started_at)) / 600) / 100;
       store.set('demo_jobs', jobs);
@@ -295,7 +311,7 @@ function demoBackend() {
       if (!job || job.status !== 'Open') throw new Error('This job is closed. Log On again to report an incident on it.');
       if (!p.comments || !p.photos.length) throw new Error('Describe the incident and add a photo');
       const list = store.get('demo_incidents', []);
-      list.push({ id: p.id, incident_type: 'Joint issue', incident_comments: p.comments, asset_id: job.asset_id, work_log_id: p.workId, photos: p.photos.length });
+      list.push({ id: p.id, incident_type: 'Joint issue', incident_comments: p.comments, asset_layer: job.asset_layer, asset_id: job.asset_id, work_log_id: p.workId, photos: p.photos.length });
       store.set('demo_incidents', list);
       console.info('[demo] joint issue', JSON.stringify(list[list.length - 1]));
       return { incident_id: p.id, incident_type: 'Joint issue' };
@@ -304,7 +320,18 @@ function demoBackend() {
       await new Promise((r) => setTimeout(r, 200));
       if (!p.type || !p.comments || !p.photos.length) throw new Error('Choose a type, describe the incident and add a photo');
       console.info('[demo] incident', JSON.stringify({ type: p.type, comments: p.comments, photos: p.photos.length }));
+      const list = store.get('demo_general_incidents', []);
+      list.push({ id: p.id, incident_type: p.type, incident_comments: p.comments, reported_at: new Date().toISOString(),
+        reporter_name: 'Demo User', lat: p.lat, lon: p.lon });
+      store.set('demo_general_incidents', list);
       return { incident_id: p.id };
+    },
+    async jointIssues() {
+      return store.get('demo_incidents', []).map((i) => ({ asset_layer: i.asset_layer, asset_id: i.asset_id }));
+    },
+    async mapIncidents(lat, lon, radius) {
+      return store.get('demo_general_incidents', [])
+        .filter((i) => radius == null || lat == null || haversine(lat, lon, i.lat, i.lon) <= radius);
     },
   };
 }
@@ -626,6 +653,7 @@ async function runQuery() {
     await refreshWorkStatus();
     renderList();
     renderMapAssets();
+    loadIncidents();
   } catch (e) {
     console.error(e);
     toast('Could not load assets. Try again.');
@@ -860,6 +888,11 @@ function renderLabels() {
   // Things a label must not cover: every point (and the blue "You" dot)
   const R = 10, H = 15;
   const blocked = pts.map(({ p }) => ({ x1: p.x - R, y1: p.y - R, x2: p.x + R, y2: p.y + R }));
+  for (const i of S.incidents || []) {                       // don't cover incident triangles either
+    if (!view.contains([i.lat, i.lon])) continue;
+    const q = S.map.latLngToContainerPoint([i.lat, i.lon]);
+    blocked.push({ x1: q.x - 12, y1: q.y - 12, x2: q.x + 12, y2: q.y + 12 });
+  }
   if (S.fix) { const u = S.map.latLngToContainerPoint([S.fix.lat, S.fix.lon]); blocked.push({ x1: u.x - 11, y1: u.y - 11, x2: u.x + 11, y2: u.y + 11 }); }
   const hit = (b) => blocked.some((o) => b.x1 < o.x2 && b.x2 > o.x1 && b.y1 < o.y2 && b.y2 > o.y1);
   // Open jobs get first pick of the best spots, then nearest-to-centre first
@@ -892,11 +925,12 @@ function ensureMap() {
   S.map = L.map('map', { zoomControl: true, attributionControl: false });   // credits are behind the small (i) button
   addBasemap(S.map);
   addCreditsButton(S.map);
-  S.mapLayers = { assets: L.layerGroup().addTo(S.map), labels: L.layerGroup().addTo(S.map), user: L.layerGroup().addTo(S.map) };
+  S.mapLayers = { assets: L.layerGroup().addTo(S.map), incidents: L.layerGroup().addTo(S.map), labels: L.layerGroup().addTo(S.map), user: L.layerGroup().addTo(S.map) };
   S.map.on?.('zoomend moveend', renderLabels);
   const f = S.fix || (S.assets[0] && { lat: S.assets[0].lat, lon: S.assets[0].lon });
   S.map.setView(f ? [f.lat, f.lon] : [-25.3, 133.8], f ? 16 : 4);
   renderMapAssets();
+  renderMapIncidents();
   updateMapUser();
   return true;
 }
@@ -914,6 +948,7 @@ function updateMapUser() {
 const FAST_STYLE = {
   idle:   { radius: 7, color: '#ffffff', weight: 2, fillColor: '#111418', fillOpacity: 1 },
   recent: { radius: 7.5, color: '#22c55e', weight: 3, fillColor: '#111418', fillOpacity: 1 },
+  issue:  { radius: 7.5, color: '#d92d20', weight: 3, fillColor: '#111418', fillOpacity: 1 },
 };
 
 function renderMapAssets() {
@@ -928,10 +963,10 @@ function renderMapAssets() {
   for (const a of S.assets) {
     if (a.lat == null) continue;
     const key = assetKey(a);
-    const st = markerState(S.work[key]);
+    const st = markerState(S.work[key], key);
     // Lots of points (e.g. Show all): draw them on a canvas, which stays fast with thousands.
     // Open jobs always use the normal pulsing marker so they stand out.
-    const m = (fast && st !== 'open')
+    const m = (fast && st !== 'open' && st !== 'both')
       ? L.circleMarker([a.lat, a.lon], { renderer: S.canvas, ...FAST_STYLE[st] })
       : L.marker([a.lat, a.lon], {
         icon: L.divIcon({ className: 'asset-icon', html: `<div class="asset-marker ${st}"></div>`, iconSize: [22, 22], iconAnchor: [11, 11] }),
@@ -968,6 +1003,39 @@ function refreshAssetOnMap(a) {
   renderList();
   renderMapAssets();
   if (S.map && !$('panel-map').hidden) S.markers[assetKey(a)]?.openPopup();
+}
+
+// ---- general incidents on the map (red triangle with a white !)
+const INCIDENT_DAYS = Number(C.incidentMapDays) || 30;     // how far back to show incidents
+const INCIDENT_SVG = '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">'
+  + '<path d="M12 2.6 1.4 21h21.2z" fill="#d92d20" stroke="#d92d20" stroke-width="1.6" stroke-linejoin="round"/>'
+  + '<rect x="10.9" y="8.6" width="2.2" height="7" rx="1.1" fill="#fff"/><circle cx="12" cy="18.1" r="1.25" fill="#fff"/></svg>';
+
+async function loadIncidents() {
+  if (!S.api?.mapIncidents || !navigator.onLine) return;
+  const f = S.fix;
+  try {
+    S.incidents = await S.api.mapIncidents(f?.lat ?? null, f?.lon ?? null, showingAll() || !f ? null : S.radius, INCIDENT_DAYS);
+  } catch (e) { console.warn('Could not load incidents', e); return; }
+  renderMapIncidents();
+}
+
+function renderMapIncidents() {
+  const g = S.mapLayers?.incidents;
+  if (!g) return;
+  g.clearLayers();
+  for (const i of S.incidents || []) {
+    if (i.lat == null || i.lon == null) continue;
+    L.marker([i.lat, i.lon], {
+      icon: L.divIcon({ className: 'incident-icon', html: INCIDENT_SVG, iconSize: [26, 26], iconAnchor: [13, 15] }),
+      zIndexOffset: 1500,
+    }).bindPopup(() => el('div', { class: 'popup incident-popup' },
+      el('div', { class: 'popup-title' }, el('strong', {}, i.incident_type || 'Incident')),
+      el('div', { class: 'incident-when' }, `${fmtWhen(i.reported_at)}${i.reporter_name ? ` · ${i.reporter_name}` : ''}`),
+      i.incident_comments ? el('div', { class: 'incident-text' }, i.incident_comments) : null),
+    { minWidth: 170, maxWidth: 240 }).addTo(g);
+  }
+  renderLabels();
 }
 
 function selectTab(which) {
@@ -1074,16 +1142,18 @@ function wireSearch() {
 // Work logs (Log On / Log Off) and incidents
 // ---------------------------------------------------------------------------
 
-// Map point style for an asset's latest job:
+// Map point style for a joint:
 //   open   - green (someone is logged on)
+//   both   - black with half green / half red outline (closed recently AND has a joint issue)
+//   issue  - black with red outline (a joint issue was reported in the last INCIDENT_DAYS days)
 //   recent - black with green outline (closed in the last closed_visible_days days)
-//   idle   - black (closed, nothing recent)
-function markerState(w) {
-  if (!w) return 'idle';
-  if (w.status === 'Open') return 'open';
+//   idle   - black
+function markerState(w, key) {
+  if (w?.status === 'Open') return 'open';
+  const issue = !!key && !!S.issues?.has(key);
   const days = Number(SETTINGS.closed_visible_days) || 0;
-  const recent = !!w.work_completed_at && Date.now() - new Date(w.work_completed_at).getTime() < days * 86400000;
-  return recent ? 'recent' : 'idle';
+  const recent = !!w?.work_completed_at && Date.now() - new Date(w.work_completed_at).getTime() < days * 86400000;
+  return recent && issue ? 'both' : issue ? 'issue' : recent ? 'recent' : 'idle';
 }
 
 function workTag(w) {
@@ -1117,7 +1187,12 @@ const workLine = (w) => (w ? workParts(w).join(' ') : '');
 async function refreshWorkStatus() {
   if (!S.assets.length) return;
   try {
-    const rows = await S.api.workStatus(showingAll() ? null : S.assets.map((a) => ({ layer: a.layer, asset_id: a.asset_id })));
+    const keys = showingAll() ? null : S.assets.map((a) => ({ layer: a.layer, asset_id: a.asset_id }));
+    const [rows, issues] = await Promise.all([
+      S.api.workStatus(keys),
+      S.api.jointIssues ? S.api.jointIssues(keys, INCIDENT_DAYS).catch((e) => { console.warn(e); return null; }) : null,
+    ]);
+    if (issues) S.issues = new Set(issues.map((r) => `${r.asset_layer}|${r.asset_id}`));
     S.work = {};
     for (const r of rows) S.work[`${r.asset_layer}|${r.asset_id}`] = r;
   } catch (e) {
@@ -1133,6 +1208,7 @@ async function pollWorkStatus() {
   await refreshWorkStatus();
   if (JSON.stringify(S.work) !== before) { renderList(); renderMapAssets(); }
   loadMyOpenWork();
+  loadIncidents();
 }
 
 async function loadSettings() {
@@ -1225,7 +1301,7 @@ function checkAway() {
 function wireOverdue() {
   $('btn-overdue-logoff').addEventListener('click', () => {
     $('dlg-overdue').close();
-    if (reminder) openLogOff(jobAsset(reminder.job));
+    if (reminder) openLogOff(jobAsset(reminder.job), { chooseTime: true });   // they pick when they actually finished
   });
   $('btn-overdue-snooze').addEventListener('click', () => {
     if (reminder) {
@@ -1481,9 +1557,27 @@ async function submitLogOn(e) {
 
 let logOffAsset = null;
 
-function openLogOff(a) {
+// opts.chooseTime: Log Off from a reminder - show "Logged on" and let them enter/choose the finish time
+let logOffChooseTime = false;
+const toLocalInput = (d) => {
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+};
+function openLogOff(a, opts = {}) {
   if (!navigator.onLine) { toast('You need a connection to Log Off.'); return; }
   logOffAsset = a;
+  logOffChooseTime = !!opts.chooseTime;
+  const job = myOpenJob(a);
+  $('logoff-times').hidden = !logOffChooseTime;
+  if (logOffChooseTime && job) {
+    const started = new Date(job.work_started_at);
+    $('logoff-start').textContent = fmtWhen(job.work_started_at);
+    const now = toLocalInput(new Date());
+    $('in-logoff-date').min = toLocalInput(started).slice(0, 10);
+    $('in-logoff-date').max = now.slice(0, 10);
+    $('in-logoff-date').value = now.slice(0, 10);   // starts at now - they change it to when they actually finished
+    $('in-logoff-time').value = now.slice(11);
+  }
   $('logoff-asset').textContent = a.name || a.asset_id;
   $('work-comment').value = '';
   $('logoff-msg').textContent = '';
@@ -1491,10 +1585,23 @@ function openLogOff(a) {
   $('dlg-logoff').showModal();
 }
 
+// The chosen Log Off time, or an error message if it isn't valid
+function chosenLogOffTime() {
+  const job = myOpenJob(logOffAsset);
+  const d = $('in-logoff-date').value, tm = $('in-logoff-time').value;
+  if (!d || !tm) return { err: 'Enter the time you finished.' };
+  const t = new Date(`${d}T${tm}`);
+  if (Number.isNaN(t.getTime())) return { err: 'Enter the time you finished.' };
+  if (job && t < new Date(new Date(job.work_started_at).setSeconds(0, 0))) return { err: 'The Log Off time must be after you logged on.' };
+  if (t > new Date(Date.now() + 60000)) return { err: "The Log Off time can't be in the future." };
+  return { t };
+}
+
 function updateLogOffForm() {
-  const ok = !!$('work-comment').value.trim();
-  $('btn-logoff-submit').disabled = !ok;
-  $('logoff-hint').textContent = ok ? '' : 'Enter a comment describing the work to log off.';
+  const hasComment = !!$('work-comment').value.trim();
+  const time = logOffChooseTime ? chosenLogOffTime() : {};
+  $('btn-logoff-submit').disabled = !hasComment || !!time.err;
+  $('logoff-hint').textContent = time.err || (hasComment ? '' : 'Enter a comment describing the work to log off.');
 }
 
 async function submitLogOff(e) {
@@ -1506,7 +1613,8 @@ async function submitLogOff(e) {
   $('btn-logoff-submit').disabled = true;
   try {
     msg('Saving…');
-    const res = await S.api.logOff({ workId: job.work_id, comments: $('work-comment').value.trim() });
+    const completedAt = logOffChooseTime ? chosenLogOffTime().t?.toISOString() : undefined;
+    const res = await S.api.logOff({ workId: job.work_id, comments: $('work-comment').value.trim(), completedAt });
     S.work[assetKey(a)] = { ...job, status: 'Closed', is_mine: true, closed_by_name: res?.closed_by_name,
       work_completed_at: res?.work_completed_at || new Date().toISOString() };
     S.myOpen = S.myOpen.filter((j) => j.work_id !== job.work_id);
@@ -1571,6 +1679,8 @@ async function submitJointIncident(e) {
       lat: S.fix?.lat ?? null, lon: S.fix?.lon ?? null, accuracy: S.fix?.accuracy ?? null });
     $('dlg-joint').close();
     toast('Joint issue reported. Thank you.', 4000);
+    (S.issues ||= new Set()).add(assetKey(a));
+    renderMapAssets();
   } catch (err) {
     console.error(err);
     msg(friendlyError(err), true);
@@ -1617,6 +1727,9 @@ async function submitIncident(e) {
       lat: fix.lat, lon: fix.lon, accuracy: fix.accuracy, photos });
     $('dlg-incident').close();
     toast('Incident reported. Thank you.', 4000);
+    (S.incidents ||= []).unshift({ id, incident_type: type, incident_comments: $('in-incident-comment').value.trim(),
+      reported_at: new Date().toISOString(), reporter_name: null, lat: fix.lat, lon: fix.lon });
+    renderMapIncidents();
   } catch (err) {
     console.error(err);
     msg(friendlyError(err), true);
@@ -1627,6 +1740,10 @@ async function submitIncident(e) {
 function wireWorkForms() {
   ['in-circuit', 'in-project', 'in-fault'].forEach((id) => $(id).addEventListener('input', updateLogOnForm));
   $('work-comment').addEventListener('input', updateLogOffForm);
+  ['in-logoff-time', 'in-logoff-date'].forEach((id) => {
+    $(id).addEventListener('input', updateLogOffForm);
+    $(id).addEventListener('change', updateLogOffForm);
+  });
   $('form-logon').addEventListener('submit', submitLogOn);
   $('form-logoff').addEventListener('submit', submitLogOff);
   $('btn-logon-cancel').addEventListener('click', () => $('dlg-logon').close());
