@@ -83,12 +83,26 @@
   <!-- Main -->
   <section id="view-main" class="view main" hidden>
     <header class="topbar">
-      <img class="topbar-logo" src="icons/fibreconx-logo.svg" alt="FibreconX" width="44" height="32">
+      <!-- Tap the logo for Settings (sign out, change password) -->
+      <button id="btn-menu" class="logo-btn" type="button" aria-label="Settings">
+        <img class="topbar-logo" src="icons/fibreconx-logo.svg" alt="" width="44" height="32">
+      </button>
       <span class="app-name topbar-title">Enclosures Field App</span>
-      <button id="btn-menu" class="icon-btn" aria-label="Settings">
-        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+      <button id="btn-search" class="icon-btn" type="button" aria-label="Search for a joint" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 0 1 6.32 12.9l5.39 5.39-1.42 1.42-5.39-5.39A8 8 0 1 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg>
       </button>
     </header>
+
+    <!-- Search for a joint by asset ID or name (anywhere - no distance limit) -->
+    <div id="search-panel" class="search-panel" role="search" hidden>
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 0 1 6.32 12.9l5.39 5.39-1.42 1.42-5.39-5.39A8 8 0 1 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg>
+        <input id="in-search" type="search" inputmode="search" autocomplete="off" autocapitalize="characters" spellcheck="false"
+               placeholder="Search asset ID or name" aria-label="Search asset ID or name" aria-autocomplete="list" aria-controls="search-suggest">
+        <button id="btn-search-close" class="search-close" type="button" aria-label="Close search">&times;</button>
+      </div>
+      <ul id="search-suggest" class="search-suggest" role="listbox" hidden></ul>
+    </div>
 
     <div class="status-panel">
       <!-- "Logged on" strip: directly under the app banner -->

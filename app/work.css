@@ -183,7 +183,7 @@ textarea:focus { outline: none; border-color: var(--brand); }
   text-align: center; font-weight: 800; font-size: clamp(1.1rem, 5.6vw, 1.35rem); letter-spacing: .01em;   /* bigger, but still fits small phones */
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.topbar #btn-menu { justify-self: end; }
+.topbar #btn-search { justify-self: end; }
 
 /* ---- list summary ("12 assets within 100 m · updated …") ---- */
 .list-summary { text-align: center; }
@@ -311,3 +311,37 @@ body { background: var(--page-bg); }
 /* reminder pop-up: Still working (left) and Log Off now (right) side by side */
 .overdue-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .overdue-btns .btn { margin: 0; white-space: nowrap; padding: 0 8px; }
+
+/* ---- header: logo is the Settings button, search icon on the right ---- */
+.logo-btn { justify-self: start; padding: 4px; margin: -4px; border: 0; background: none; border-radius: 10px; cursor: pointer; line-height: 0; }
+.logo-btn:active { background: rgba(255,255,255,.12); }
+
+/* ---- search panel (under the header) ---- */
+.search-panel { position: relative; z-index: 6; padding: 10px 16px 0; background: var(--page-bg, #142022); }
+.search-box {
+  display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px;
+  background: #fff; border: 2px solid #cfe3df; border-radius: 12px; color: #55605f;
+}
+.search-box input {
+  flex: 1; min-width: 0; min-height: 46px; border: 0; outline: none; background: transparent;
+  font: inherit; font-size: 1rem; color: #0e1a1b;
+}
+.search-box input::-webkit-search-cancel-button { display: none; }
+.search-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; font-size: 24px; line-height: 1; color: #55605f; cursor: pointer; }
+.search-suggest {
+  list-style: none; margin: 6px 0 0; padding: 4px; max-height: 50vh; overflow-y: auto;
+  background: #fff; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  position: absolute; left: 16px; right: 16px;
+}
+.search-suggest[hidden] { display: none; }
+.suggest-item {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; font: inherit; color: #0e1a1b; cursor: pointer;
+}
+.suggest-item:active, .suggest-item:hover { background: #ecfdf3; }
+.suggest-main { display: flex; flex-direction: column; min-width: 0; }
+.suggest-main strong { font-size: .98rem; }
+.suggest-name { font-size: .82rem; color: #55605f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.suggest-meta { flex: none; font-size: .78rem; color: #55605f; }
+.suggest-note { padding: 10px; font-size: .88rem; color: #55605f; }
+.link-btn { padding: 0; border: 0; background: none; font: inherit; color: #86efac; font-weight: 700; text-decoration: underline; cursor: pointer; }

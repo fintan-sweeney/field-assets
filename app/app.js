@@ -132,6 +132,12 @@ async function supabaseBackend() {
       if (error) throw error;
       return data;
     },
+    // Search by asset ID or name anywhere in the network
+    async searchAssets(q, limit = 10) {
+      const { data, error } = await sb.rpc('search_assets', { p_query: q, p_limit: limit });
+      if (error) throw error;
+      return data || [];
+    },
     // Whole network (Distance > Show all), fetched 1000 rows at a time
     async allAssets() {
       const page = 1000, out = [];
@@ -254,6 +260,15 @@ function demoBackend() {
       job.duration_mins = Math.round((done - new Date(job.work_started_at)) / 600) / 100;
       store.set('demo_jobs', jobs);
       return { work_id: p.workId, status: 'Closed', work_completed_at: job.work_completed_at, duration_mins: job.duration_mins, closed_by_name: 'Demo User' };
+    },
+    async searchAssets(q, limit = 10) {
+      await new Promise((r) => setTimeout(r, 120));
+      const t = q.trim().toLowerCase();
+      if (t.length < 2 || !assets) return [];
+      const rank = (a) => (a.asset_id.toLowerCase() === t ? 0 : a.asset_id.toLowerCase().startsWith(t) ? 1
+        : (a.name || '').toLowerCase().startsWith(t) ? 2 : 3);
+      return assets.filter((a) => a.asset_id.toLowerCase().includes(t) || (a.name || '').toLowerCase().includes(t))
+        .sort((x, y) => rank(x) - rank(y) || x.asset_id.localeCompare(y.asset_id)).slice(0, limit).map((a) => ({ ...a }));
     },
     async allAssets() {
       if (!assets) throw new Error('Search once first');
@@ -578,7 +593,7 @@ const showingAll = () => S.radius === 0;
 
 function maybeQuery(force = false) {
   const f = S.fix;
-  if (!f || S.querying) return;
+  if (!f || S.querying || S.search) return;          // showing a search result: leave it until cleared
   const q = S.lastQuery;
   if (showingAll()) {                         // whole network already loaded: no need to re-search when moving
     if (force || !q || q.radius !== 0) runQuery();
@@ -590,6 +605,7 @@ function maybeQuery(force = false) {
 }
 
 async function runQuery() {
+  if (S.search) return;                              // a search result is showing (Distance clears it first)
   const f = S.fix;
   if (!f) { toast('Waiting for your location…'); return; }
   if (!navigator.onLine) { toast('Offline - showing the last list'); return; }
@@ -644,7 +660,10 @@ function renderList() {
   let items = S.assets.map((a) => ({ a, ...liveDistance(a) })).sort((x, y) => (x.d ?? Infinity) - (y.d ?? Infinity));
   const when = S.assetsAt ? ` · updated ${fmtTime(new Date(S.assetsAt))}` : '';
   const LIST_MAX = 100;   // Show all: list the nearest 100, the map shows everything
-  if (showingAll()) {
+  if (S.search) {
+    summary.textContent = '';
+    summary.append('Search result · ', el('button', { type: 'button', class: 'link-btn', onclick: clearSearch }, 'Clear search'));
+  } else if (showingAll()) {
     summary.textContent = `${items.length.toLocaleString()} joints in the network`
       + (items.length > LIST_MAX ? ` · nearest ${LIST_MAX} listed, all on the Map` : '') + when;
     items = items.slice(0, LIST_MAX);
@@ -925,7 +944,7 @@ function renderMapAssets() {
     pts.push([a.lat, a.lon]);
   }
   if (!S.mapFitted && pts.length) {
-    if (S.fix) pts.push([S.fix.lat, S.fix.lon]);
+    if (S.fix && !S.search) pts.push([S.fix.lat, S.fix.lon]);
     S.map.fitBounds(pts, { padding: [30, 30], maxZoom: 18 });
     S.mapFitted = true;
   }
@@ -965,6 +984,91 @@ function selectTab(which) {
   } else {
     renderList();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Search: find a joint by asset ID or name anywhere (separate from Distance)
+// ---------------------------------------------------------------------------
+
+let searchSeq = 0, searchTimer = null, searchHits = [];
+
+function openSearch() {
+  $('search-panel').hidden = false;
+  $('btn-search').setAttribute('aria-expanded', 'true');
+  $('in-search').focus();
+  if ($('in-search').value.trim().length >= 2) runSearch();
+}
+function closeSearch() {
+  $('search-panel').hidden = true;
+  $('search-suggest').hidden = true;
+  $('btn-search').setAttribute('aria-expanded', 'false');
+}
+
+function runSearch() {
+  clearTimeout(searchTimer);
+  const q = $('in-search').value.trim();
+  const box = $('search-suggest');
+  if (q.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  searchTimer = setTimeout(async () => {
+    if (!navigator.onLine) { showSuggestions([], 'You need a connection to search.'); return; }
+    const seq = ++searchSeq;
+    try {
+      const rows = await S.api.searchAssets(q, 10);
+      if (seq === searchSeq) showSuggestions(rows, rows.length ? '' : `No joints match "${q}".`);
+    } catch (e) {
+      console.warn(e);
+      if (seq === searchSeq) showSuggestions([], 'Search failed. Try again.');
+    }
+  }, 250);
+}
+
+function showSuggestions(rows, note) {
+  searchHits = rows;
+  const box = $('search-suggest');
+  box.innerHTML = '';
+  for (const a of rows) {
+    const d = S.fix && a.lat != null ? fmtDist(haversine(S.fix.lat, S.fix.lon, a.lat, a.lon)) : '';
+    box.append(el('li', { role: 'option' },
+      el('button', { type: 'button', class: 'suggest-item', onclick: () => chooseSearchResult(a) },
+        el('span', { class: 'suggest-main' }, el('strong', {}, a.asset_id),
+          a.name && a.name !== a.asset_id ? el('span', { class: 'suggest-name' }, a.name) : null),
+        el('span', { class: 'suggest-meta' }, [a.asset_type || a.layer, d].filter(Boolean).join(' · ')))));
+  }
+  if (note) box.append(el('li', { class: 'suggest-note' }, note));
+  box.hidden = false;
+}
+
+async function chooseSearchResult(a) {
+  closeSearch();
+  $('in-search').value = a.asset_id;
+  S.search = a;
+  S.assets = [a];
+  S.assetsAt = Date.now();
+  S.openAsset = assetKey(a);                 // open it so Log On / Show on map are right there
+  S.mapFitted = false;                       // map zooms to it
+  await refreshWorkStatus();
+  renderList();
+  renderMapAssets();
+  if (!$('panel-map').hidden && S.map && a.lat != null) S.map.setView([a.lat, a.lon], 18);
+}
+
+function clearSearch() {
+  S.search = null;
+  S.lastQuery = null;
+  S.mapFitted = false;
+  S.openAsset = null;
+  $('in-search').value = '';
+  findNearMe();                              // back to the joints within the chosen Distance
+}
+
+function wireSearch() {
+  $('btn-search').addEventListener('click', () => ($('search-panel').hidden ? openSearch() : closeSearch()));
+  $('btn-search-close').addEventListener('click', closeSearch);
+  $('in-search').addEventListener('input', runSearch);
+  $('in-search').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); if (searchHits[0]) chooseSearchResult(searchHits[0]); }
+    if (e.key === 'Escape') closeSearch();
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1588,6 +1692,7 @@ async function init() {
   const showDistance = () => { $('sel-distance').value = String(S.radius); };   // chosen distance is ticked in the list
   showDistance();
   $('sel-distance').addEventListener('change', (e) => {
+    if (S.search) { S.search = null; S.lastQuery = null; S.mapFitted = false; S.openAsset = null; $('in-search').value = ''; }
     S.radius = Number(e.target.value);
     store.set('radius', S.radius);
     showDistance();
@@ -1595,7 +1700,8 @@ async function init() {
   });
   $('tab-list').addEventListener('click', () => selectTab('list'));
   $('tab-map').addEventListener('click', () => selectTab('map'));
-  $('btn-menu').addEventListener('click', () => $('sheet-settings').showModal());
+  $('btn-menu').addEventListener('click', () => $('sheet-settings').showModal());   // tap the logo
+  wireSearch();
   // Map key: open with the button, close with ×
   const setLegend = (open) => {
     $('map-legend').hidden = !open;
