@@ -345,3 +345,7 @@ body { background: var(--page-bg); }
 .suggest-meta { flex: none; font-size: .78rem; color: #55605f; }
 .suggest-note { padding: 10px; font-size: .88rem; color: #55605f; }
 .link-btn { padding: 0; border: 0; background: none; font: inherit; color: #86efac; font-weight: 700; text-decoration: underline; cursor: pointer; }
+
+/* header logo a little smaller */
+.topbar-logo { height: 32px; }
+@media (max-width: 360px) { .topbar-logo { height: 28px; } }

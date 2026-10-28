@@ -1030,8 +1030,7 @@ function showSuggestions(rows, note) {
     const d = S.fix && a.lat != null ? fmtDist(haversine(S.fix.lat, S.fix.lon, a.lat, a.lon)) : '';
     box.append(el('li', { role: 'option' },
       el('button', { type: 'button', class: 'suggest-item', onclick: () => chooseSearchResult(a) },
-        el('span', { class: 'suggest-main' }, el('strong', {}, a.asset_id),
-          a.name && a.name !== a.asset_id ? el('span', { class: 'suggest-name' }, a.name) : null),
+        el('span', { class: 'suggest-main' }, el('strong', {}, a.asset_id)),
         el('span', { class: 'suggest-meta' }, [a.asset_type || a.layer, d].filter(Boolean).join(' · ')))));
   }
   if (note) box.append(el('li', { class: 'suggest-note' }, note));
