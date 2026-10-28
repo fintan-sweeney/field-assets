@@ -252,8 +252,10 @@ function demoBackend() {
     async logOn(p) {
       await new Promise((r) => setTimeout(r, 200));
       const jobs = store.get('demo_jobs', {});
-      const key = `${p.layer}|${p.assetId}`;
-      if (jobs[key]?.status === 'Open') throw new Error('This asset is already open');
+      const key = p.workId;                     // one entry per job: several people can be logged on to a joint
+      if (Object.values(jobs).some((j) => j.asset_layer === p.layer && j.asset_id === p.assetId && j.status === 'Open' && j.is_mine !== false)) {
+        throw new Error('You are already logged on to this joint');
+      }
       if (!p.circuitId && !p.projectId && !p.faultId) throw new Error('Enter a Circuit ID, Project ID or Fault ID to log on');
       const dist = haversine(p.userLat, p.userLon, p.lat, p.lon);
       if (dist > SETTINGS.logon_max_distance_m) throw new Error(`You are ${Math.round(dist)} m from this asset. You must be within ${SETTINGS.logon_max_distance_m} m to log on.`);
@@ -291,9 +293,20 @@ function demoBackend() {
       return assets.map((a) => ({ ...a }));
     },
     async workStatus(keys) {
-      const jobs = store.get('demo_jobs', {});
-      if (!keys) return Object.values(jobs);
-      return keys.map((k) => jobs[`${k.layer}|${k.asset_id}`]).filter(Boolean);
+      // Same shape as the database: one row per joint (my open job first), plus open_count etc.
+      const groups = {};
+      for (const j of Object.values(store.get('demo_jobs', {}))) (groups[`${j.asset_layer}|${j.asset_id}`] ||= []).push(j);
+      const rows = Object.entries(groups).map(([, list]) => {
+        const open = list.filter((j) => j.status === 'Open');
+        const pick = [...list].sort((x, y) => (y.status === 'Open') - (x.status === 'Open')
+          || ((y.is_mine !== false) - (x.is_mine !== false)) || (new Date(y.work_started_at) - new Date(x.work_started_at)))[0];
+        return { ...pick, open_count: open.length,
+          oldest_open_started: open.length ? open.map((j) => j.work_started_at).sort()[0] : null,
+          any_away: open.some((j) => j.away) };
+      });
+      if (!keys) return rows;
+      const want = new Set(keys.map((k) => `${k.layer}|${k.asset_id}`));
+      return rows.filter((r) => want.has(`${r.asset_layer}|${r.asset_id}`));
     },
     async setAway(workId, away) {
       const jobs = store.get('demo_jobs', {});
@@ -301,7 +314,7 @@ function demoBackend() {
       if (j) { j.away = away; store.set('demo_jobs', jobs); }
     },
     async myOpenWork() {
-      return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open')
+      return Object.values(store.get('demo_jobs', {})).filter((j) => j.status === 'Open' && j.is_mine !== false)
         .map((j) => ({ ...j, work_id: j.work_id }));
     },
     async settings() { return { logon_max_distance_m: 50, logon_max_gps_accuracy_m: 100, closed_visible_days: 2, logon_overdue_hours: 4, logoff_prompt_distance_m: 30 }; },
@@ -709,7 +722,7 @@ function renderList() {
       S.work[key] ? el('span', { class: 'asset-status' }, workTag(S.work[key])) : null,   // OPEN / CLOSED, top right
       // List: "By User" on the left, "@ time date" on the right (colour shows open/closed)
       S.work[key] ? el('span', { class: `asset-work ${S.work[key].status === 'Open' ? 'open' : 'closed'}` },
-        el('span', { class: 'asset-work-who' }, `By ${workUser(S.work[key])}`),
+        el('span', { class: 'asset-work-who' }, `By ${workUser(S.work[key])}${S.work[key].status === 'Open' && S.work[key].open_count > 1 ? ` +${S.work[key].open_count - 1}` : ''}`),
         el('span', { class: 'asset-work-when' }, `@ ${fmtWhen(S.work[key].status === 'Open' ? S.work[key].work_started_at : S.work[key].work_completed_at)}`)) : null,
     );
     const li = el('li', { class: `asset${S.work[key]?.status === 'Open' ? ' job-open' : ''}${jobAlert(key) ? ' job-alert' : ''}`, 'data-key': key }, head);   // green outline when open, red when a reminder is due
@@ -1031,8 +1044,8 @@ function renderMapIncidents() {
       zIndexOffset: 1500,
     }).bindPopup(() => el('div', { class: 'popup incident-popup' },
       el('div', { class: 'popup-title' }, el('strong', {}, i.incident_type || 'Incident')),
-      el('div', { class: 'incident-when' }, `${fmtWhen(i.reported_at)}${i.reporter_name ? ` · ${i.reporter_name}` : ''}`),
-      i.incident_comments ? el('div', { class: 'incident-text' }, i.incident_comments) : null),
+      i.incident_comments ? el('div', { class: 'incident-text' }, i.incident_comments) : null,
+      el('div', { class: 'incident-when' }, `${i.reporter_name ? `${i.reporter_name} · ` : ''}${fmtWhen(i.reported_at)}`)),
     { minWidth: 170, maxWidth: 240 }).addTo(g);
   }
   renderLabels();
@@ -1321,7 +1334,8 @@ function wireOverdue() {
 //   an open job whose person has moved away (their phone shares a yes/no flag - never a location)
 function jobAlert(key) {
   const w = S.work[key];
-  if (w?.status === 'Open' && ((w.work_started_at && isOverdue(w)) || w.away)) return true;   // w.away: yes/no only, no location
+  if (w?.status === 'Open' && (isOverdue({ work_started_at: w.oldest_open_started || w.work_started_at })
+      || w.any_away || w.away)) return true;   // any open job on the joint; away is yes/no only, no location
   const mine = S.myOpen?.find((x) => `${x.asset_layer}|${x.asset_id}` === key);
   return !!mine && (isOverdue(mine) || isAway(mine));
 }
@@ -1386,9 +1400,10 @@ async function currentFix(msg) {
 function workButton(a, compact = false) {
   const w = S.work[assetKey(a)];
   const cls = compact ? ' small' : '';
-  if (w?.status === 'Open') {
-    return w.is_mine ? [el('button', { class: `btn danger-fill${cls}`, onclick: () => openLogOff(a) }, 'Log Off')] : [];
+  if (w?.status === 'Open' && w.is_mine) {
+    return [el('button', { class: `btn danger-fill${cls}`, onclick: () => openLogOff(a) }, 'Log Off')];
   }
+  // Not logged on yourself: you can Log On, even if someone else is still logged on (e.g. forgot to log off)
   const chk = logOnCheck(a);
   return [
     el('button', { class: `btn logon-btn${cls}`, disabled: !chk.ok, onclick: () => openLogOn(a) }, 'Log On'),
@@ -1539,7 +1554,9 @@ async function submitLogOn(e) {
     });
     const job = { asset_layer: a.layer, asset_id: a.asset_id, work_id: workId, status: 'Open', is_mine: true,
       field_worker_name: res?.field_worker_name, work_started_at: res?.work_started_at || new Date().toISOString() };
-    S.work[assetKey(a)] = job;
+    const prev = S.work[assetKey(a)];
+    S.work[assetKey(a)] = { ...job, open_count: prev?.status === 'Open' ? (prev.open_count || 1) + 1 : 1,
+      oldest_open_started: prev?.status === 'Open' ? (prev.oldest_open_started || prev.work_started_at) : job.work_started_at };
     S.myOpen = [...S.myOpen.filter((j) => j.work_id !== workId),
       { work_id: workId, asset_layer: a.layer, asset_id: a.asset_id, asset_name: a.name, asset_lat: a.lat, asset_lon: a.lon, work_started_at: job.work_started_at }];
     $('dlg-logon').close();
@@ -1621,6 +1638,7 @@ async function submitLogOff(e) {
     $('dlg-logoff').close();
     renderActiveJobs();
     refreshAssetOnMap(a);
+    refreshWorkStatus().then(() => refreshAssetOnMap(a));   // others may still be logged on to this joint
     const mins = res?.duration_mins;
     toast(`Logged off · status CLOSED${mins != null ? ` · ${Number(mins).toFixed(2)} min` : ''}`, 4000);
   } catch (err) {
