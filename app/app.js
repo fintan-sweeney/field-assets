@@ -208,12 +208,12 @@ function demoBackend() {
   const seed = (n) => { const x = Math.sin(n * 9301 + 49297) * 233280; return x - Math.floor(x); };
   const makeAssets = (lat, lon) => {
     const types = [['Poles', 'Pole'], ['Pits', 'Pit'], ['Cabinets', 'Cabinet'], ['Poles', 'Pole'], ['Joints', 'Splice joint']];
-    const statuses = ['In service', 'In service', 'In service', 'Planned', 'Faulty'];
+    const owners = ['FibreconX', 'FibreconX', 'NBN Co', 'Telstra', 'Council'];
     return Array.from({ length: 80 }, (_, i) => {
       const [layer, type] = types[i % types.length];
       const d = 30 + seed(i) * 2500, b = seed(i + 100) * 2 * Math.PI;
       return {
-        layer, asset_type: type, status: statuses[Math.floor(seed(i + 7) * statuses.length)],
+        layer, asset_type: type, owner: owners[Math.floor(seed(i + 7) * owners.length)],
         asset_id: `${type.slice(0, 3).toUpperCase()}-${String(10000 + i * 37).slice(1)}`,
         name: `${type} ${String(10000 + i * 37).slice(1)}`,
         lat: lat + (d * Math.cos(b)) / 111320,
@@ -728,7 +728,7 @@ function renderList() {
     const li = el('li', { class: `asset${S.work[key]?.status === 'Open' ? ' job-open' : ''}${jobAlert(key) ? ' job-alert' : ''}`, 'data-key': key }, head);   // green outline when open, red when a reminder is due
 
     if (open) {
-      const rows = [['Asset ID', a.asset_id], ['Layer', a.layer], ['Type', a.asset_type], ['Status', a.status],
+      const rows = [['Asset ID', a.asset_id], ['Layer', a.layer], ['Type', a.asset_type], ['Owner', a.owner ?? a.status],
         ...Object.entries(a.attributes || {})];
       const dl = el('dl', {}, rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, fmtValue(v))]));
       li.append(el('div', { class: 'asset-body' }, dl,
@@ -1412,13 +1412,16 @@ function workButton(a, compact = false) {
   ];
 }
 
+// Map popup heading: asset ID, with the owner in brackets, e.g. "SPL-1813 (NBN Co)"
+const popupHeading = (a) => `${a.asset_id}${(a.owner ?? a.status) ? ` (${a.owner ?? a.status})` : ''}`;
+
 // Small, tidy popup for the map: just the asset name (centred) and the Log On / Log Off button
 function buildPopup(a) {
   const w = S.work[assetKey(a)];
   const mine = w?.status === 'Open' && w.is_mine;
   if (!mine) {
     return el('div', { class: 'popup' },
-      el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id)),
+      el('div', { class: 'popup-title' }, el('strong', {}, popupHeading(a))),
       ...workButton(a, true));
   }
   // Logged on here: Log Off is the main button; the small warning button opens Log Joint Incident
@@ -1428,7 +1431,7 @@ function buildPopup(a) {
     + '<path d="M12 2.6 1.4 21h21.2z" fill="#d92d20" stroke="#d92d20" stroke-width="1.6" stroke-linejoin="round"/>'
     + '<rect x="10.9" y="8.6" width="2.2" height="7" rx="1.1" fill="#fff"/><circle cx="12" cy="18.1" r="1.25" fill="#fff"/></svg>';
   return el('div', { class: 'popup' },
-    el('div', { class: 'popup-title' }, el('strong', {}, a.name || a.asset_id)),
+    el('div', { class: 'popup-title' }, el('strong', {}, popupHeading(a))),
     el('div', { class: 'popup-actions' }, ...workButton(a, true), joint));
 }
 
