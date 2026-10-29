@@ -340,7 +340,7 @@ function demoBackend() {
       return { incident_id: p.id };
     },
     async jointIssues() {
-      return store.get('demo_incidents', []).map((i) => ({ asset_layer: i.asset_layer, asset_id: i.asset_id }));
+      return store.get('demo_incidents', []).map((i, n) => ({ asset_layer: i.asset_layer, asset_id: i.asset_id, arcgis_objectid: 200 + n }));
     },
     async mapIncidents(lat, lon, radius) {
       return store.get('demo_general_incidents', [])
@@ -1206,7 +1206,7 @@ async function refreshWorkStatus() {
       S.api.workStatus(keys),
       S.api.jointIssues ? S.api.jointIssues(keys, INCIDENT_DAYS).catch((e) => { console.warn(e); return null; }) : null,
     ]);
-    if (issues) S.issues = new Set(issues.map((r) => `${r.asset_layer}|${r.asset_id}`));
+    if (issues) S.issues = new Map(issues.map((r) => [`${r.asset_layer}|${r.asset_id}`, r.arcgis_objectid ?? null]));   // key -> latest joint issue OBJECTID
     S.work = {};
     for (const r of rows) S.work[`${r.asset_layer}|${r.asset_id}`] = r;
   } catch (e) {
@@ -1414,6 +1414,12 @@ function workButton(a, compact = false) {
 
 // Map popup: asset ID as the heading, owner underneath in slightly smaller text
 const popupOwner = (a) => ((a.owner ?? a.status) ? el('div', { class: 'popup-owner' }, a.owner ?? a.status) : null);
+// Under the owner: "Joint issue (OBJECTID)" when the point has the red / half-red outline
+const popupIssue = (a) => {
+  const key = assetKey(a);
+  if (!['issue', 'both'].includes(markerState(S.work[key], key))) return null;
+  return el('div', { class: 'popup-issue' }, `Joint issue (${S.issues.get(key) ?? 'pending'})`);
+};
 
 // Small, tidy popup for the map: just the asset name (centred) and the Log On / Log Off button
 function buildPopup(a) {
@@ -1423,6 +1429,7 @@ function buildPopup(a) {
     return el('div', { class: 'popup' },
       el('div', { class: 'popup-title' }, el('strong', {}, a.asset_id)),
       popupOwner(a),
+      popupIssue(a),
       ...workButton(a, true));
   }
   // Logged on here: Log Off is the main button; the small warning button opens Log Joint Incident
@@ -1434,6 +1441,7 @@ function buildPopup(a) {
   return el('div', { class: 'popup' },
     el('div', { class: 'popup-title' }, el('strong', {}, a.asset_id)),
       popupOwner(a),
+      popupIssue(a),
     el('div', { class: 'popup-actions' }, ...workButton(a, true), joint));
 }
 
@@ -1703,7 +1711,7 @@ async function submitJointIncident(e) {
       lat: S.fix?.lat ?? null, lon: S.fix?.lon ?? null, accuracy: S.fix?.accuracy ?? null });
     $('dlg-joint').close();
     toast('Joint issue reported. Thank you.', 4000);
-    (S.issues ||= new Set()).add(assetKey(a));
+    (S.issues ||= new Map()).set(assetKey(a), null);   // OBJECTID arrives once the push script has sent it
     renderMapAssets();
   } catch (err) {
     console.error(err);
