@@ -1284,7 +1284,10 @@ function checkOverdue() {
     $('overdue-text').textContent = `You're about ${fmtDist(awayDistance(job))} away.`;
   } else {
     $('overdue-title').textContent = 'Are you finished?';
-    $('overdue-text').textContent = `You're logged on ${fmtLength(now - new Date(job.work_started_at).getTime())}.`;
+    // Today: just the time ("since 06:56"); an earlier day: time and date ("since 06:56 28/10/2026")
+    const sameDay = new Date(job.work_started_at).toDateString() === new Date().toDateString();
+    const since = sameDay ? fmtWhen(job.work_started_at).split(' ')[0] : fmtWhen(job.work_started_at);
+    $('overdue-text').textContent = `You're logged on since ${since}.`;
   }
   $('dlg-overdue').showModal();
 }
