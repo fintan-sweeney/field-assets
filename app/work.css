@@ -356,8 +356,8 @@ body { background: var(--page-bg); }
 .legend-incident { flex: none; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
 .incident-popup { align-items: stretch; gap: 4px; }
 .incident-popup .popup-title { color: var(--open); }
-.incident-when { text-align: center; font-size: .8rem; color: #55605f; }
-.incident-text { font-size: .88rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow-y: auto; }
+.incident-when { text-align: center; font-size: .74rem; color: #6b7674; margin-top: 2px; }
+.incident-text { text-align: center; font-size: .9rem; line-height: 1.35; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 120px; overflow-y: auto; }
 
 /* joint: closed recently AND joint issue - black with half green / half red outline */
 .asset-marker.both {
@@ -379,3 +379,6 @@ body { background: var(--page-bg); }
   border: 2px solid #22c55e; border-radius: 8px; background: #fff;
 }
 #in-logoff-date { min-height: 32px; font-size: .8rem; font-weight: 600; border-width: 1px; border-color: #b7dcc6; }
+
+/* map popup: owner under the asset ID */
+.popup-owner { margin-top: -6px; text-align: center; font-size: .85rem; font-weight: 600; color: #3f4a49; }

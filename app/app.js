@@ -1412,8 +1412,8 @@ function workButton(a, compact = false) {
   ];
 }
 
-// Map popup heading: asset ID, with the owner in brackets, e.g. "SPL-1813 (NBN Co)"
-const popupHeading = (a) => `${a.asset_id}${(a.owner ?? a.status) ? ` (${a.owner ?? a.status})` : ''}`;
+// Map popup: asset ID as the heading, owner underneath in slightly smaller text
+const popupOwner = (a) => ((a.owner ?? a.status) ? el('div', { class: 'popup-owner' }, a.owner ?? a.status) : null);
 
 // Small, tidy popup for the map: just the asset name (centred) and the Log On / Log Off button
 function buildPopup(a) {
@@ -1421,7 +1421,8 @@ function buildPopup(a) {
   const mine = w?.status === 'Open' && w.is_mine;
   if (!mine) {
     return el('div', { class: 'popup' },
-      el('div', { class: 'popup-title' }, el('strong', {}, popupHeading(a))),
+      el('div', { class: 'popup-title' }, el('strong', {}, a.asset_id)),
+      popupOwner(a),
       ...workButton(a, true));
   }
   // Logged on here: Log Off is the main button; the small warning button opens Log Joint Incident
@@ -1431,7 +1432,8 @@ function buildPopup(a) {
     + '<path d="M12 2.6 1.4 21h21.2z" fill="#d92d20" stroke="#d92d20" stroke-width="1.6" stroke-linejoin="round"/>'
     + '<rect x="10.9" y="8.6" width="2.2" height="7" rx="1.1" fill="#fff"/><circle cx="12" cy="18.1" r="1.25" fill="#fff"/></svg>';
   return el('div', { class: 'popup' },
-    el('div', { class: 'popup-title' }, el('strong', {}, popupHeading(a))),
+    el('div', { class: 'popup-title' }, el('strong', {}, a.asset_id)),
+      popupOwner(a),
     el('div', { class: 'popup-actions' }, ...workButton(a, true), joint));
 }
 
