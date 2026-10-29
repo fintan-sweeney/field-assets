@@ -1044,7 +1044,7 @@ function renderMapIncidents() {
       zIndexOffset: 1500,
     }).bindPopup(() => el('div', { class: 'popup incident-popup' },
       el('div', { class: 'popup-title' }, el('strong', {},
-        `${i.incident_type || 'Incident'} (${i.arcgis_objectid ?? 'pending'})`)),   // ArcGIS OBJECTID, or pending until synced
+        `${i.incident_type || 'Incident'} (${i.arcgis_objectid != null ? `ID${i.arcgis_objectid}` : 'pending'})`)),   // ArcGIS OBJECTID, or pending until synced
       i.incident_comments ? el('div', { class: 'incident-text' }, i.incident_comments) : null,
       el('div', { class: 'incident-when' }, `${i.reporter_name ? `${i.reporter_name} · ` : ''}${fmtWhen(i.reported_at)}`)),
     { minWidth: 170, maxWidth: 240 }).addTo(g);
@@ -1418,7 +1418,8 @@ const popupOwner = (a) => ((a.owner ?? a.status) ? el('div', { class: 'popup-own
 const popupIssue = (a) => {
   const key = assetKey(a);
   if (!['issue', 'both'].includes(markerState(S.work[key], key))) return null;
-  return el('div', { class: 'popup-issue' }, `Joint issue (${S.issues.get(key) ?? 'pending'})`);
+  const oid = S.issues.get(key);
+  return el('div', { class: 'popup-issue' }, `Joint issue (${oid != null ? `ID${oid}` : 'pending'})`);
 };
 
 // Small, tidy popup for the map: just the asset name (centred) and the Log On / Log Off button
